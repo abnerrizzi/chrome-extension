@@ -1,0 +1,84 @@
+name: Build Chrome Extension
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'extension/**'
+      - '.github/workflows/build-extension.yml'
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # necessário para anexar arquivos na release em tags
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install crx CLI
+        run: npm install -g crx@5
+
+      - name: Resolve version + filename
+        id: meta
+        run: |
+          VERSION=$(jq -r .version extension/manifest.json)
+          REF_TAG="${GITHUB_REF#refs/tags/}"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            VERSION="${REF_TAG#v}"
+          fi
+          BASENAME="chrome-extension-${VERSION}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "basename=$BASENAME" >> "$GITHUB_OUTPUT"
+          echo "::notice::Building $BASENAME (manifest version $VERSION)"
+
+      - name: Provision signing key
+        env:
+          CRX_PRIVATE_KEY: ${{ secrets.CRX_PRIVATE_KEY }}
+        run: |
+          if [ -n "$CRX_PRIVATE_KEY" ]; then
+            printf '%s' "$CRX_PRIVATE_KEY" > key.pem
+            echo "::notice::Usando CRX_PRIVATE_KEY do secret."
+          else
+            echo "::warning::Secret CRX_PRIVATE_KEY ausente — gerando chave efêmera (extension ID mudará a cada build)."
+            openssl genrsa -out key.pem 2048
+          fi
+          chmod 600 key.pem
+
+      - name: Pack .crx
+        run: crx pack extension -o "${{ steps.meta.outputs.basename }}.crx" -p key.pem
+
+      - name: Build .zip (Chrome Web Store upload)
+        run: |
+          cd extension
+          zip -r "../${{ steps.meta.outputs.basename }}.zip" . -x '*.DS_Store' '*/.*'
+
+      - name: Verify artifacts
+        run: |
+          ls -lh ${{ steps.meta.outputs.basename }}.*
+          file ${{ steps.meta.outputs.basename }}.crx
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.basename }}
+          path: |
+            ${{ steps.meta.outputs.basename }}.crx
+            ${{ steps.meta.outputs.basename }}.zip
+          retention-days: 30
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ steps.meta.outputs.basename }}.crx
+            ${{ steps.meta.outputs.basename }}.zip
+          generate_release_notes: true
