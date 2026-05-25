@@ -57,6 +57,14 @@ def test_sessions_endpoint_responds():
     assert isinstance(r.json(), list)
 
 
+def test_olx_accepts_iso_and_epoch_dates():
+    from app.normalization.olx import _date_to_iso
+    assert _date_to_iso("2026-05-09T04:58:00Z").startswith("2026-05-09T04:58:00")
+    assert _date_to_iso("1715228280000").startswith("2024-05-09")  # ms epoch
+    assert _date_to_iso("1715228280").startswith("2024-05-09")     # s epoch
+    assert _date_to_iso(None) is None
+
+
 def test_external_id_upsert_dedupes_olx():
     """Mesmo external_id em ingests separados não gera duplicata."""
     import os

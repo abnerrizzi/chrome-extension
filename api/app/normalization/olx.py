@@ -40,19 +40,41 @@ def _first_int(raw: Optional[str]) -> Optional[int]:
     return int(m.group(0)) if m else None
 
 
-def _date_to_iso(raw: Optional[str], now: Optional[datetime] = None) -> Optional[str]:
-    """Converte '9 de mai, 04:58' para ISO-8601. Ano = ano atual; volta um ano se ficar no futuro."""
-    if not raw:
+_ISO_RX = re.compile(r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}")
+_DIGITS_ONLY = re.compile(r"^\d{10,}$")  # unix epoch (s ou ms)
+
+
+def _date_to_iso(raw, now: Optional[datetime] = None) -> Optional[str]:
+    """Converte para ISO-8601 aceitando 3 formatos comuns:
+    1. pt-BR DOM antigo: '9 de mai, 04:58'
+    2. ISO 8601 já formatado (passa direto): '2026-05-09T04:58:00Z'
+    3. Unix timestamp em segundos ou ms (string ou int): '1715228280000'
+    """
+    if raw in (None, "", 0):
         return None
+    s = str(raw).strip()
+
+    # ISO já formatado → passa direto.
+    if _ISO_RX.match(s):
+        return s
+
+    # Unix timestamp puro.
+    if _DIGITS_ONLY.match(s):
+        ts = int(s)
+        if ts > 10_000_000_000:  # ms
+            ts = ts / 1000
+        return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+
+    # pt-BR abreviado.
     m = re.match(
         r"^\s*(?P<day>\d{1,2})\s+de\s+(?P<mon>[a-z]{3})\.?,?\s+(?P<hh>\d{1,2}):(?P<mm>\d{2})\s*$",
-        raw.strip().lower(),
+        s.lower(),
     )
     if not m:
-        return raw
+        return s  # passa o original — validação posterior decide
     mon = _MONTHS_PT.get(m.group("mon"))
     if not mon:
-        return raw
+        return s
     now = now or datetime.now(timezone.utc)
     candidate = datetime(now.year, mon, int(m.group("day")),
                          int(m.group("hh")), int(m.group("mm")), tzinfo=timezone.utc)
