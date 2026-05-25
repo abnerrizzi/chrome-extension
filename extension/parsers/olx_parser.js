@@ -6,27 +6,48 @@
 //     categoryName ("Casas"), category
 //     origListTime / date (unix epoch SEGUNDOS)
 //     images[].original, images[].originalWebp
-//     location (string plana) | locationDetails {municipality, neighbourhood, uf, ddd}
+//     locationDetails {municipality, neighbourhood, uf, ddd}
 //     properties[] {name, label, value}
-//       names úteis: size, rooms, bathrooms, garage_spaces, iptu, condominio, real_estate_type
+//       names úteis: size, rooms, bathrooms, garage_spaces, iptu, condominio,
+//                    category, real_estate_type ("Venda - casa em ...",
+//                                                 "Aluguel - casa em ...")
+//
+// Módulos: hoje filtra apenas anúncios de **venda** ou **aluguel** de casas
+// (kind = "venda" | "aluguel"). Demais (temporada, troca etc.) são descartados.
 //
 (function () {
-  const data = readNextData();
-  if (!data) {
-    sendCount(0, [], "__NEXT_DATA__ ausente");
-    return;
+  runOnce();
+
+  // Re-executa o parser sempre que o conteúdo de __NEXT_DATA__ mudar.
+  // OBS: no OLX o Next.js raramente substitui o script no client (paginação
+  // SPA usa pushState e re-injeção via webNavigation cobre isso). Mas o
+  // observer existe para o caso de re-hidratação real.
+  const script = document.getElementById("__NEXT_DATA__");
+  if (script) {
+    const obs = new MutationObserver(() => runOnce());
+    obs.observe(script, { childList: true, characterData: true, subtree: true });
   }
 
-  const ads = getPath(data, "props.pageProps.ads");
-  if (!Array.isArray(ads)) {
-    console.warn("[olx_parser] props.pageProps.ads não é array. Top keys:", Object.keys(data.props?.pageProps || {}));
-    sendCount(0, [], "ads array não encontrado");
-    return;
-  }
-  console.info(`[olx_parser] ${ads.length} ads na página`);
+  // ---------- main ----------
 
-  const items = ads.map(toItem).filter(Boolean).filter(isHouse);
-  sendCount(items.length, items);
+  function runOnce() {
+    const data = readNextData();
+    if (!data) {
+      sendCount(0, [], "__NEXT_DATA__ ausente");
+      return;
+    }
+
+    const ads = getPath(data, "props.pageProps.ads");
+    if (!Array.isArray(ads)) {
+      console.warn("[olx_parser] props.pageProps.ads não é array. Top keys:", Object.keys(data.props?.pageProps || {}));
+      sendCount(0, [], "ads array não encontrado");
+      return;
+    }
+    console.info(`[olx_parser] ${ads.length} ads na página`);
+
+    const items = ads.map(toItem).filter(Boolean).filter(isVendaOuAluguel);
+    sendCount(items.length, items);
+  }
 
   // ---------- helpers ----------
 
@@ -54,14 +75,26 @@
     const title = ad.subject || ad.title || null;
     if (!title || !url || id == null) return null;
 
+    const ld = ad.locationDetails || {};
     const dateRaw = ad.origListTime ?? ad.date;
+    const realEstateTypeRaw = findProp(ad.properties, "real_estate_type");
+    const categoryRaw = findProp(ad.properties, "category");
+
     return {
       external_id: String(id),
       title: String(title),
       url: String(url),
       price_raw: ad.priceValue || null,
       listing_kind: ad.categoryName || ad.category || null,
+      // location composta — mantida pra compat com popup/preview.
       location: formatLocation(ad),
+      neighbourhood: ld.neighbourhood || null,
+      city_raw: ld.municipality || null,
+      state_raw: ld.uf || null,
+      category_raw: categoryRaw,
+      real_estate_type_raw: realEstateTypeRaw,
+      kind: kindFromRealEstateType(realEstateTypeRaw)
+          || kindFromTitleOrUrl(title, url),
       // schema OLX define `date_raw` como string; origListTime vem como int.
       date_raw: dateRaw != null ? String(dateRaw) : null,
       image_url: pickImage(ad),
@@ -100,12 +133,29 @@
     return null;
   }
 
-  function isHouse(it) {
-    if (!it) return false;
-    // categoryName === "Casas" é o sinal mais confiável (vem do classificador OLX).
-    if (it.listing_kind && /^casas?$/i.test(it.listing_kind.trim())) return true;
-    if (it.url && /\/imoveis\/casa/i.test(it.url)) return true;
-    if (it.title && /\bcasa\b/i.test(it.title)) return true;
-    return false;
+  function normalize(s) {
+    if (!s) return "";
+    return String(s).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  }
+
+  function kindFromRealEstateType(raw) {
+    if (!raw) return null;
+    // formato observado: "Venda - casa em condominio fechado",
+    //                    "Aluguel - casa em rua pública"
+    const prefix = normalize(raw).split("-")[0].trim();
+    if (prefix.startsWith("venda")) return "venda";
+    if (prefix.startsWith("aluguel") || prefix.startsWith("locacao")) return "aluguel";
+    return null;
+  }
+
+  function kindFromTitleOrUrl(title, url) {
+    const t = normalize(title) + " " + normalize(url);
+    if (/\b(aluguel|alugar|locacao|para alugar)\b/.test(t)) return "aluguel";
+    if (/\b(venda|vender|a venda|comprar|compra)\b/.test(t)) return "venda";
+    return null;
+  }
+
+  function isVendaOuAluguel(it) {
+    return !!(it && (it.kind === "venda" || it.kind === "aluguel"));
   }
 })();
