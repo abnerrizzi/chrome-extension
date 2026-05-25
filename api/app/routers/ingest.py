@@ -32,20 +32,17 @@ def domains() -> list[str]:
     return list_domains()
 
 
-@router.post("/ingest")
-def ingest(payload: IngestPayload):
-    # 1. Resolve schema do domínio.
+def process_items(domain_id: str, items_raw: Any) -> dict:
+    """Validate → normalize → persist. Shared por /ingest e /scrape."""
     try:
-        schema = get_schema(payload.domain_id)
+        schema = get_schema(domain_id)
     except SchemaNotFoundError:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"unknown domain: {payload.domain_id}")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"unknown domain: {domain_id}")
 
-    # 2. Constrói modelo Pydantic em runtime e valida cada item.
-    Model = build_item_model(payload.domain_id, schema)
-    items_raw = payload.raw_data.get("items", [])
     if not isinstance(items_raw, list):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "raw_data.items must be a list")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "items must be a list")
 
+    Model = build_item_model(domain_id, schema)
     validated: list[dict] = []
     errors: list[dict] = []
     for idx, raw in enumerate(items_raw):
@@ -57,16 +54,13 @@ def ingest(payload: IngestPayload):
     if errors and not validated:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=errors)
 
-    # 3. Normalização pura (preço → cents, datas → ISO-8601, etc.).
-    normalizer = NORMALIZERS.get(payload.domain_id, lambda xs: xs)
+    normalizer = NORMALIZERS.get(domain_id, lambda xs: xs)
     normalized = normalizer(validated)
 
-    # 4. Persistir no Postgres (graceful degradation: API responde 200 mesmo
-    #    se o DB estiver offline ou sem migrações aplicadas).
-    session_id, skipped_reason = persistence.persist(payload.domain_id, normalized)
+    session_id, skipped_reason = persistence.persist(domain_id, normalized)
 
     return {
-        "domain_id": payload.domain_id,
+        "domain_id": domain_id,
         "received": len(items_raw),
         "validated": len(validated),
         "errors": errors,
@@ -75,3 +69,8 @@ def ingest(payload: IngestPayload):
         "skipped_reason": skipped_reason,
         "normalized": normalized,
     }
+
+
+@router.post("/ingest")
+def ingest(payload: IngestPayload):
+    return process_items(payload.domain_id, payload.raw_data.get("items", []))

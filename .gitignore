@@ -31,3 +31,10 @@ data/
 
 # Scratch / dev fixtures (não vai pro repo)
 tmp/
+
+# Cookies coletados via DevTools (sessão / cf_clearance) — nunca commitar
+api/.olx-cookies.txt
+api/.*-cookies.txt
+
+# Saídas de fetch one-off
+api/out.html
