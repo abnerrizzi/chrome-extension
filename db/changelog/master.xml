@@ -9,9 +9,9 @@
     <property name="json.type"          value="JSONB"     dbms="postgresql"/>
     <property name="timestamp.type"     value="TIMESTAMPTZ" dbms="postgresql"/>
 
-    <include file="modules/core.xml"     relativeToChangelogFile="true"/>
-    <include file="modules/linkedin.xml" relativeToChangelogFile="true"/>
-    <include file="modules/olx.xml"      relativeToChangelogFile="true"/>
-    <include file="modules/auctions.xml" relativeToChangelogFile="true"/>
+    <include file="modules/core.sql"     relativeToChangelogFile="true"/>
+    <include file="modules/linkedin.sql" relativeToChangelogFile="true"/>
+    <include file="modules/olx.sql"      relativeToChangelogFile="true"/>
+    <include file="modules/auctions.sql" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>
