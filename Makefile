@@ -1,0 +1,52 @@
+# Pipeline end-to-end equivalente ao parser da extensão:
+#   fetch  → extract → ingest → sessions
+# Tudo containerizado (curl-impersonate via Docker contorna o Cloudflare do OLX).
+
+SHELL       := /bin/bash
+.SHELLFLAGS := -eu -o pipefail -c
+
+API         ?= http://localhost:8000
+URL         ?= https://www.olx.com.br/imoveis/venda/estado-go?q=casa%20setor%20jao,%20goiania&rfs=115
+OUT_DIR     := tmp
+HTML        := $(OUT_DIR)/olx_live.html
+PAYLOAD     := $(OUT_DIR)/olx_payload.json
+IMPERSONATE := lwthiker/curl-impersonate:0.5-chrome
+BROWSER     := curl_chrome110
+
+.DEFAULT_GOAL := help
+
+help:  ## mostra os targets disponíveis
+	@awk 'BEGIN{FS=":.*?## "} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+
+$(OUT_DIR):
+	@mkdir -p $(OUT_DIR)
+
+fetch: | $(OUT_DIR)  ## baixa a página OLX (URL=...) via curl-impersonate (bypassa Cloudflare)
+	@echo "→ fetch  $(URL)"
+	@docker run --rm -v "$(CURDIR)/$(OUT_DIR):/out" $(IMPERSONATE) \
+		$(BROWSER) -sL -o /out/$(notdir $(HTML)) \
+		-w 'http=%{http_code} size=%{size_download}\n' "$(URL)"
+	@grep -q '__NEXT_DATA__' $(HTML) || (echo "✘ __NEXT_DATA__ ausente — Cloudflare provavelmente bloqueou"; exit 1)
+
+extract: $(HTML)  ## extrai casas do __NEXT_DATA__ (mesma lógica do parser JS)
+	@python3 scripts/extract_olx.py $(HTML) $(PAYLOAD)
+
+ingest: $(PAYLOAD)  ## envia o payload extraído para a API e formata o resultado
+	@echo "→ POST   $(API)/api/v1/ingest"
+	@curl -sS -X POST $(API)/api/v1/ingest \
+		-H 'Content-Type: application/json' \
+		--data @$(PAYLOAD) | python3 -m json.tool
+
+run: fetch extract ingest  ## pipeline completo: fetch → extract → ingest
+
+sessions:  ## lista as últimas sessões persistidas
+	@curl -sS $(API)/api/v1/sessions?limit=10 | python3 -m json.tool
+
+session-%:  ## detalha uma sessão (uso: make session-25)
+	@curl -sS $(API)/api/v1/sessions/$* | python3 -m json.tool
+
+clean:  ## limpa artefatos intermediários
+	@rm -rf $(OUT_DIR)/olx_live.html $(OUT_DIR)/olx_payload.json
+	@echo "✓ tmp/olx_*.{html,json} removidos"
+
+.PHONY: help fetch extract ingest run sessions clean
