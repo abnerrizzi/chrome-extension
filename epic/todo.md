@@ -28,5 +28,5 @@
 ## Infraestrutura transversal
 - [x] Docker Compose orquestrando db + api + liquibase
 - [x] Skill `/commit` Conventional Commits (1-linha ≤75 chars)
-- [ ] Hook `PostToolUse` invocando `/commit`
+- [x] Hook `PostToolUse` invocando `/commit`
 - [x] `epic/todo.md` mantido em sincronia com o progresso
