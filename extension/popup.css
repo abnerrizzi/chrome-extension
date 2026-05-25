@@ -130,52 +130,77 @@ body {
 .dv { color: var(--success); word-break: break-all; }
 .dv-err { color: var(--error); }
 
-/* ---------- send.mode (radios) ---------- */
-.mode {
-  border: 0;
-  margin: 0;
-  padding: 6px 0 4px;
-  border-top: 1px dashed var(--border);
+/* ---------- auto-send toggle (estilo design "site") ---------- */
+.site {
   display: flex;
   align-items: center;
-  gap: 14px;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-top: 1px dashed var(--border);
+  border-bottom: 1px solid var(--border);
+  margin: 4px 0 0;
 }
-.mode-legend {
-  font-size: 10px;
-  letter-spacing: 0.4px;
-  color: var(--dim);
-  padding: 0 6px 0 0;
+.site-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.3;
+}
+.site-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1px;
+  color: var(--text);
+}
+.site-domain {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--accent);
   text-transform: lowercase;
 }
-.radio {
+.site-toggle {
+  width: 36px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 10px;
-  color: var(--dim);
-  cursor: pointer;
-  user-select: none;
 }
-.radio input { position: absolute; opacity: 0; pointer-events: none; }
-.radio-mark {
-  width: 10px; height: 10px;
+.site-toggle-track {
+  width: 36px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: 999px;
+  background: rgba(255, 180, 84, 0.04);
   border: 1px solid var(--muted);
-  border-radius: 50%;
-  position: relative;
-  flex: 0 0 auto;
+  transition: background 0.16s ease, border-color 0.16s ease;
 }
-.radio input:checked + .radio-mark {
+.site-toggle-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--muted);
+  transform: translateX(0);
+  transition: transform 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+.site-toggle[aria-checked="true"] .site-toggle-track {
+  background: rgba(255, 180, 84, 0.18);
   border-color: var(--accent);
 }
-.radio input:checked + .radio-mark::after {
-  content: "";
-  position: absolute;
-  inset: 2px;
+.site-toggle[aria-checked="true"] .site-toggle-thumb {
   background: var(--accent);
-  border-radius: 50%;
+  transform: translateX(18px);
+  box-shadow: 0 0 6px rgba(255, 180, 84, 0.5);
 }
-.radio input:checked ~ .radio-label { color: var(--accent); }
-.radio input:focus-visible + .radio-mark { box-shadow: 0 0 0 2px var(--accent); }
+.site-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
 
 /* ---------- footer (button + endpoint) ---------- */
 .ftr {

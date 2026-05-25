@@ -57,19 +57,16 @@
         </div>
       </section>
 
-      <fieldset class="mode" id="mode">
-        <legend class="mode-legend">send.mode</legend>
-        <label class="radio">
-          <input type="radio" name="autosend" value="off" checked>
-          <span class="radio-mark"></span>
-          <span class="radio-label">manual</span>
-        </label>
-        <label class="radio">
-          <input type="radio" name="autosend" value="on">
-          <span class="radio-mark"></span>
-          <span class="radio-label">auto-send</span>
-        </label>
-      </fieldset>
+      <section class="site">
+        <div class="site-text">
+          <span class="site-label">auto-send</span>
+          <span class="site-domain" id="autosend-state">disabled</span>
+        </div>
+        <button class="site-toggle" type="button" aria-checked="false"
+                role="switch" aria-label="auto-send" id="autosend-toggle">
+          <span class="site-toggle-track"><span class="site-toggle-thumb"></span></span>
+        </button>
+      </section>
 
       <footer class="ftr">
         <button class="btn-primary" id="send" disabled>

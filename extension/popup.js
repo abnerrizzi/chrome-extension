@@ -217,14 +217,21 @@ document.getElementById("open-options").addEventListener("click", (e) => {
   chrome.runtime.openOptionsPage();
 });
 
-async function initModeRadios() {
-  const on = await getAutoSend();
-  const target = document.querySelector(`input[name="autosend"][value="${on ? "on" : "off"}"]`);
-  if (target) target.checked = true;
-  document.querySelectorAll('input[name="autosend"]').forEach((el) => {
-    el.addEventListener("change", () => setAutoSend(el.value === "on"));
+async function initAutoSendToggle() {
+  const btn = document.getElementById("autosend-toggle");
+  const state = document.getElementById("autosend-state");
+  if (!btn) return;
+  const render = (on) => {
+    btn.setAttribute("aria-checked", on ? "true" : "false");
+    state.textContent = on ? "enabled" : "disabled";
+  };
+  render(await getAutoSend());
+  btn.addEventListener("click", async () => {
+    const next = btn.getAttribute("aria-checked") !== "true";
+    render(next);
+    await setAutoSend(next);
   });
 }
 
-initModeRadios();
+initAutoSendToggle();
 load();
