@@ -73,3 +73,27 @@ CREATE INDEX ix_olx_listings_neighbourhood ON olx_listings(neighbourhood);
 --rollback     DROP COLUMN IF EXISTS real_estate_type,
 --rollback     DROP COLUMN IF EXISTS kind,
 --rollback     DROP COLUMN IF EXISTS neighbourhood;
+
+
+--changeset claude:olx-005-price-amount
+--preconditions onFail:HALT onError:HALT
+--precondition-sql-check expectedResult:1 SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='olx_listings' AND column_name='price_cents'
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='olx_listings' AND column_name='price'
+ALTER TABLE olx_listings
+    ADD COLUMN price NUMERIC(12,2),
+    ADD COLUMN iptu  NUMERIC(12,2);
+UPDATE olx_listings SET
+    price = price_cents::numeric / 100,
+    iptu  = iptu_cents::numeric  / 100;
+ALTER TABLE olx_listings
+    DROP COLUMN price_cents,
+    DROP COLUMN iptu_cents;
+--rollback ALTER TABLE olx_listings
+--rollback     ADD COLUMN price_cents BIGINT,
+--rollback     ADD COLUMN iptu_cents  BIGINT;
+--rollback UPDATE olx_listings SET
+--rollback     price_cents = (price * 100)::bigint,
+--rollback     iptu_cents  = (iptu  * 100)::bigint;
+--rollback ALTER TABLE olx_listings
+--rollback     DROP COLUMN IF EXISTS price,
+--rollback     DROP COLUMN IF EXISTS iptu;

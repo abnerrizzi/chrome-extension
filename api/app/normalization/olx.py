@@ -21,14 +21,18 @@ _MONTHS_PT = {
 }
 
 
-def _price_to_cents(raw: Optional[str]) -> Optional[int]:
+def _price_to_amount(raw: Optional[str]) -> Optional[float]:
+    """Converte string monetária (`R$ 2.250.000`, `R$ 1.234,56`) em reais como
+    float. Mantém centavos quando presentes; valores típicos do OLX (até
+    ~10⁸) cabem em float sem perda de precisão de até 2 casas decimais.
+    """
     if not raw:
         return None
     cleaned = _PRICE_RX.sub("", raw).replace(",", ".")
     if not cleaned:
         return None
     try:
-        return int(round(float(cleaned) * 100))
+        return float(cleaned)
     except ValueError:
         return None
 
@@ -96,7 +100,7 @@ def normalize(items: list[dict]) -> list[dict]:
             "external_id": it.get("external_id"),
             "title": (it.get("title") or "").strip(),
             "url": it.get("url"),
-            "price_cents": _price_to_cents(it.get("price_raw")),
+            "price": _price_to_amount(it.get("price_raw")),
             "currency": "BRL",
             "listing_kind": _clean(it.get("listing_kind")),
             "kind": _clean(it.get("kind")),
@@ -108,7 +112,7 @@ def normalize(items: list[dict]) -> list[dict]:
             "state": _clean(it.get("state_raw")),
             "posted_at": _date_to_iso(it.get("date_raw")),
             "image_url": it.get("image_url"),
-            "iptu_cents": _price_to_cents(it.get("iptu_raw")),
+            "iptu": _price_to_amount(it.get("iptu_raw")),
             "bedrooms": _first_int(it.get("bedrooms_raw")),
             "bathrooms": _first_int(it.get("bathrooms_raw")),
             "garage_spaces": _first_int(it.get("garage_spaces_raw")),

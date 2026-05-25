@@ -66,10 +66,10 @@ def _insert_items(cur, domain_id: str, session_id: int, items: list[dict]) -> No
     elif domain_id == "olx":
         cur.executemany(
             "INSERT INTO olx_listings "
-            "(session_id, external_id, title, url, price_cents, currency, listing_kind, "
+            "(session_id, external_id, title, url, price, currency, listing_kind, "
             " kind, real_estate_type, category, "
             " neighbourhood, city, state, "
-            " posted_at, image_url, iptu_cents, bedrooms, bathrooms, "
+            " posted_at, image_url, iptu, bedrooms, bathrooms, "
             " garage_spaces, area_m2) "
             "VALUES (%s,%s,%s,%s,%s,%s,%s,"
             "        %s,%s,%s,"
@@ -77,21 +77,21 @@ def _insert_items(cur, domain_id: str, session_id: int, items: list[dict]) -> No
             "        %s,%s,%s,%s,%s,%s,%s) "
             "ON CONFLICT (external_id) WHERE external_id IS NOT NULL DO UPDATE SET "
             "  session_id=EXCLUDED.session_id, title=EXCLUDED.title, url=EXCLUDED.url, "
-            "  price_cents=EXCLUDED.price_cents, currency=EXCLUDED.currency, "
+            "  price=EXCLUDED.price, currency=EXCLUDED.currency, "
             "  listing_kind=EXCLUDED.listing_kind, kind=EXCLUDED.kind, "
             "  real_estate_type=EXCLUDED.real_estate_type, category=EXCLUDED.category, "
             "  neighbourhood=EXCLUDED.neighbourhood, city=EXCLUDED.city, "
             "  state=EXCLUDED.state, "
             "  posted_at=EXCLUDED.posted_at, image_url=EXCLUDED.image_url, "
-            "  iptu_cents=EXCLUDED.iptu_cents, bedrooms=EXCLUDED.bedrooms, "
+            "  iptu=EXCLUDED.iptu, bedrooms=EXCLUDED.bedrooms, "
             "  bathrooms=EXCLUDED.bathrooms, garage_spaces=EXCLUDED.garage_spaces, "
             "  area_m2=EXCLUDED.area_m2",
             [(session_id, it.get("external_id"), it["title"], it["url"],
-              it.get("price_cents"), it.get("currency"), it.get("listing_kind"),
+              it.get("price"), it.get("currency"), it.get("listing_kind"),
               it.get("kind"), it.get("real_estate_type"), it.get("category"),
               it.get("neighbourhood"), it.get("city"), it.get("state"),
               it.get("posted_at"), it.get("image_url"),
-              it.get("iptu_cents"), it.get("bedrooms"), it.get("bathrooms"),
+              it.get("iptu"), it.get("bedrooms"), it.get("bathrooms"),
               it.get("garage_spaces"), it.get("area_m2")) for it in items],
         )
     elif domain_id == "auctions":

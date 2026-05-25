@@ -119,8 +119,8 @@ def test_olx_house_payload_full_normalization():
     r = client.post("/api/v1/ingest", json=payload)
     assert r.status_code == 200, r.text
     out = r.json()["normalized"][0]
-    assert out["price_cents"] == 225_000_000
-    assert out["iptu_cents"] == 100_000
+    assert out["price"] == 2_250_000
+    assert out["iptu"] == 1_000
     assert out["bedrooms"] == 3
     assert out["bathrooms"] == 4
     assert out["garage_spaces"] == 4
