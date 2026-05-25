@@ -1,12 +1,20 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "OlxListingItem",
+  "title": "OlxHouseItem",
   "type": "object",
   "required": ["title", "url"],
   "properties": {
-    "title":     { "type": "string", "description": "Título do anúncio" },
-    "price_raw": { "type": "string", "description": "Preço como string localizada (R$ 1.234,56)" },
-    "location":  { "type": "string", "description": "Cidade/UF" },
-    "url":       { "type": "string", "description": "URL canônica do anúncio" }
+    "title":             { "type": "string", "description": "Título do anúncio" },
+    "url":               { "type": "string", "description": "URL canônica do anúncio" },
+    "price_raw":         { "type": "string", "description": "Preço como string (R$ 2.250.000)" },
+    "listing_kind":      { "type": "string", "description": "Ex: 'Casa À venda', 'Casa Para alugar'" },
+    "location":          { "type": "string", "description": "Cidade, bairro" },
+    "date_raw":          { "type": "string", "description": "Data localizada (ex: '9 de mai, 04:58')" },
+    "image_url":         { "type": "string", "description": "URL da thumbnail principal" },
+    "iptu_raw":          { "type": "string", "description": "Texto IPTU bruto (ex: 'IPTU R$ 1.000')" },
+    "bedrooms_raw":      { "type": "string", "description": "aria-label de quartos (ex: '3 quartos')" },
+    "bathrooms_raw":     { "type": "string", "description": "aria-label de banheiros" },
+    "garage_spaces_raw": { "type": "string", "description": "aria-label de vagas/garagem" },
+    "area_raw":          { "type": "string", "description": "aria-label de área (ex: '230 metros quadrados')" }
   }
 }
