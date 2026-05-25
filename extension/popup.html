@@ -2,21 +2,73 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <title>Modular DOM Counter</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <header>
-      <h1>Modular DOM Counter</h1>
-      <span id="domain-pill" class="pill">—</span>
-    </header>
-    <section class="summary">
-      <div class="count" id="count">0</div>
-      <div class="label">itens detectados</div>
-    </section>
-    <button id="send" disabled>Enviar para API</button>
-    <a href="#" id="open-options" class="link">⚙️ Configurar URL da API</a>
-    <pre id="status" class="status"></pre>
+    <div class="card">
+      <header class="hdr">
+        <div class="hdr-left">
+          <span class="prompt">$</span>
+          <span class="hdr-title">scraper</span>
+          <span class="hdr-ver">v0.1</span>
+        </div>
+        <div class="hdr-right" data-state="checking" id="status-pill">
+          <span class="dot"></span>
+          <span class="api-label" id="api-label">checking</span>
+        </div>
+      </header>
+
+      <section class="meta">
+        <div class="meta-row">
+          <span class="k">domain</span>
+          <span class="v" id="m-domain">—</span>
+        </div>
+        <div class="meta-row">
+          <span class="k">tab</span>
+          <span class="v" id="m-tab">—</span>
+        </div>
+        <div class="meta-row">
+          <span class="k">items</span>
+          <span class="v"><span class="count" id="m-count">0</span></span>
+        </div>
+      </section>
+
+      <section class="preview" id="preview-section" hidden>
+        <div class="section-bar">
+          <span class="caret">▾</span>
+          <span class="section-title">items.preview</span>
+          <span class="section-aux" id="preview-aux"></span>
+        </div>
+        <ol class="items" id="items-list"></ol>
+      </section>
+
+      <section class="result" id="result-section" hidden>
+        <div class="section-bar">
+          <span class="caret">▾</span>
+          <span class="section-title" id="result-title">ingest.ok</span>
+          <span class="section-aux" id="result-aux">status 200</span>
+        </div>
+        <div class="result-body">
+          <div class="res-row">
+            <span class="res-tag" id="res-tag">success</span>
+            <span class="res-msg" id="res-msg">persisted</span>
+          </div>
+          <ul class="res-detail" id="res-detail"></ul>
+        </div>
+      </section>
+
+      <footer class="ftr">
+        <button class="btn-primary" id="send" disabled>
+          <span class="btn-glyph">↑</span>
+          <span class="btn-label">Enviar para API</span>
+        </button>
+        <div class="endpoint">
+          <span class="method">POST</span>
+          <span class="path" id="endpoint-path">localhost:8000/api/v1/ingest</span>
+        </div>
+        <a href="#" class="link" id="open-options">⚙ configurar</a>
+      </footer>
+    </div>
     <script src="popup.js"></script>
   </body>
 </html>

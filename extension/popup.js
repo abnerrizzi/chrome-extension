@@ -1,9 +1,26 @@
 const DEFAULT_API_URL = "http://localhost:8000";
 
-const $count = document.getElementById("count");
-const $domain = document.getElementById("domain-pill");
-const $send = document.getElementById("send");
-const $status = document.getElementById("status");
+const $count   = document.getElementById("m-count");
+const $domain  = document.getElementById("m-domain");
+const $tab     = document.getElementById("m-tab");
+const $statusPill = document.getElementById("status-pill");
+const $apiLabel   = document.getElementById("api-label");
+
+const $previewSection = document.getElementById("preview-section");
+const $previewAux     = document.getElementById("preview-aux");
+const $itemsList      = document.getElementById("items-list");
+
+const $resultSection = document.getElementById("result-section");
+const $resultTitle   = document.getElementById("result-title");
+const $resultAux     = document.getElementById("result-aux");
+const $resTag        = document.getElementById("res-tag");
+const $resMsg        = document.getElementById("res-msg");
+const $resDetail     = document.getElementById("res-detail");
+
+const $send         = document.getElementById("send");
+const $endpointPath = document.getElementById("endpoint-path");
+
+const MAX_PREVIEW = 8;
 
 async function currentTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -15,27 +32,153 @@ async function getApiBase() {
   return apiUrl.replace(/\/+$/, "");
 }
 
+function setStatus(state, label) {
+  $statusPill.dataset.state = state;
+  $apiLabel.textContent = label;
+}
+
+async function pingApi(base) {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 1500);
+    const res = await fetch(`${base}/healthz`, { signal: ctrl.signal });
+    clearTimeout(t);
+    setStatus(res.ok ? "online" : "offline", res.ok ? "online" : `http ${res.status}`);
+  } catch {
+    setStatus("offline", "offline");
+  }
+}
+
+function previewFields(domain, item) {
+  if (domain === "linkedin") {
+    return {
+      title: item.job_title || item.title || "",
+      price: item.company || "",
+      meta:  shortenUrl(item.url),
+    };
+  }
+  if (domain === "auctions") {
+    return {
+      title: item.title || "",
+      price: item.current_bid_raw || "",
+      meta:  item.lot_code || shortenUrl(item.url),
+    };
+  }
+  // olx + default
+  return {
+    title: item.title || "",
+    price: item.price_raw || "",
+    meta:  shortenUrl(item.url),
+  };
+}
+
+function shortenUrl(u) {
+  if (!u) return "";
+  try {
+    const url = new URL(u);
+    const path = url.pathname.length > 36 ? url.pathname.slice(0, 33) + "…" : url.pathname;
+    return url.host + path;
+  } catch { return u; }
+}
+
+function renderItems(domain, items) {
+  $itemsList.innerHTML = "";
+  const shown = items.slice(0, MAX_PREVIEW);
+  for (const it of shown) {
+    const f = previewFields(domain, it);
+    const li = document.createElement("li");
+    const t = document.createElement("span"); t.className = "it-title"; t.textContent = f.title;
+    const p = document.createElement("span"); p.className = "it-price"; p.textContent = f.price;
+    const m = document.createElement("span"); m.className = "it-meta";  m.textContent = f.meta;
+    li.append(t, p, m);
+    $itemsList.appendChild(li);
+  }
+  $previewAux.textContent = items.length > MAX_PREVIEW
+    ? `${shown.length} of ${items.length}`
+    : `${items.length}`;
+}
+
 async function load() {
   const tab = await currentTab();
+  $tab.textContent = tab ? `#${tab.id}` : "—";
+
+  const base = await getApiBase();
+  $endpointPath.textContent = `${stripScheme(base)}/api/v1/ingest`;
+  pingApi(base);
+
   if (!tab) return;
   const key = `tab:${tab.id}`;
   const data = (await chrome.storage.session.get(key))[key];
-  if (!data) {
-    $status.textContent = "Aguardando contagem do parser na aba ativa…";
+  if (!data || !data.count) {
+    $domain.textContent = "—";
     return;
   }
-  $count.textContent = String(data.count);
+
   $domain.textContent = data.domain;
+  $count.textContent = String(data.count);
+
+  if (data.items && data.items.length) {
+    $previewSection.hidden = false;
+    renderItems(data.domain, data.items);
+  }
+
   $send.disabled = data.count === 0;
   $send.dataset.payload = JSON.stringify({
     domain_id: data.domain,
-    raw_data: { items: data.items },
+    raw_data: { items: data.items || [] },
   });
+}
+
+function stripScheme(url) {
+  return url.replace(/^https?:\/\//, "");
+}
+
+function showResult(httpStatus, body) {
+  $resultSection.hidden = false;
+  const ok      = httpStatus >= 200 && httpStatus < 300;
+  const persisted = !!(body && body.persisted);
+  const errCount  = body && Array.isArray(body.errors) ? body.errors.length : 0;
+
+  $resultTitle.textContent = ok ? "ingest.ok" : "ingest.err";
+  $resultAux.textContent   = `status ${httpStatus}`;
+
+  if (ok && persisted) {
+    $resTag.textContent = "success";
+    $resTag.classList.remove("err");
+    $resMsg.textContent = "persisted";
+  } else if (ok && !persisted) {
+    $resTag.textContent = "warn";
+    $resTag.classList.add("err");
+    $resMsg.textContent = body.skipped_reason || "not persisted";
+  } else {
+    $resTag.textContent = "error";
+    $resTag.classList.add("err");
+    $resMsg.textContent = (body && body.detail) ? "validation failed" : "request failed";
+  }
+
+  const rows = ok && body ? [
+    ["session_id", body.session_id ?? "—", "ok"],
+    ["inserted",   body.validated ?? 0,    "ok"],
+    ["errors",     errCount,                errCount ? "err" : "ok"],
+    ["persisted",  String(persisted),       persisted ? "ok" : "err"],
+  ] : [
+    ["status",     httpStatus,             "err"],
+    ["detail",     JSON.stringify(body || {}).slice(0, 80), "err"],
+  ];
+
+  $resDetail.innerHTML = "";
+  for (const [k, v, kind] of rows) {
+    const li = document.createElement("li");
+    const dk = document.createElement("span"); dk.className = "dk"; dk.textContent = k;
+    const dv = document.createElement("span"); dv.className = "dv" + (kind === "err" ? " dv-err" : ""); dv.textContent = v;
+    li.append(dk, dv);
+    $resDetail.appendChild(li);
+  }
 }
 
 $send.addEventListener("click", async () => {
   $send.disabled = true;
-  $status.textContent = "Enviando…";
+  $send.querySelector(".btn-label").textContent = "enviando…";
   try {
     const base = await getApiBase();
     const res = await fetch(`${base}/api/v1/ingest`, {
@@ -43,12 +186,13 @@ $send.addEventListener("click", async () => {
       headers: { "Content-Type": "application/json" },
       body: $send.dataset.payload,
     });
-    const body = await res.json();
-    $status.textContent = `HTTP ${res.status}\n${JSON.stringify(body, null, 2)}`;
+    const body = await res.json().catch(() => ({}));
+    showResult(res.status, body);
   } catch (err) {
-    $status.textContent = `Erro: ${err.message}\n(configure a URL em Opções da extensão)`;
+    showResult(0, { detail: err.message });
   } finally {
     $send.disabled = false;
+    $send.querySelector(".btn-label").textContent = "Enviar para API";
   }
 });
 
