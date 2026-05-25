@@ -83,6 +83,13 @@ def _date_to_iso(raw, now: Optional[datetime] = None) -> Optional[str]:
     return candidate.isoformat()
 
 
+def _clean(s):
+    if s is None:
+        return None
+    s = str(s).strip()
+    return s or None
+
+
 def normalize(items: list[dict]) -> list[dict]:
     return [
         {
@@ -91,8 +98,14 @@ def normalize(items: list[dict]) -> list[dict]:
             "url": it.get("url"),
             "price_cents": _price_to_cents(it.get("price_raw")),
             "currency": "BRL",
-            "listing_kind": (it.get("listing_kind") or "").strip() or None,
-            "location": (it.get("location") or "").strip() or None,
+            "listing_kind": _clean(it.get("listing_kind")),
+            "kind": _clean(it.get("kind")),
+            "real_estate_type": _clean(it.get("real_estate_type_raw")),
+            "category": _clean(it.get("category_raw")),
+            "location": _clean(it.get("location")),
+            "neighbourhood": _clean(it.get("neighbourhood")),
+            "city": _clean(it.get("city_raw")),
+            "state": _clean(it.get("state_raw")),
             "posted_at": _date_to_iso(it.get("date_raw")),
             "image_url": it.get("image_url"),
             "iptu_cents": _price_to_cents(it.get("iptu_raw")),
