@@ -7,8 +7,10 @@ SHELL       := /bin/bash
 
 API         ?= http://localhost:8000
 URL         ?= https://www.olx.com.br/imoveis/venda/estado-go?q=casa%20setor%20jao,%20goiania&rfs=115
+URL	    ?= https://www.olx.com.br/imoveis/aluguel/estado-go/grande-goiania-e-anapolis?pe=4500&q=setor%20jao
 OUT_DIR     := tmp
 HTML        := $(OUT_DIR)/olx_live.html
+RAW         := $(OUT_DIR)/olx_next_data.json
 PAYLOAD     := $(OUT_DIR)/olx_payload.json
 IMPERSONATE := lwthiker/curl-impersonate:0.5-chrome
 BROWSER     := curl_chrome110
@@ -28,8 +30,12 @@ fetch: | $(OUT_DIR)  ## baixa a página OLX (URL=...) via curl-impersonate (bypa
 		-w 'http=%{http_code} size=%{size_download}\n' "$(URL)"
 	@grep -q '__NEXT_DATA__' $(HTML) || (echo "✘ __NEXT_DATA__ ausente — Cloudflare provavelmente bloqueou"; exit 1)
 
-extract: $(HTML)  ## extrai casas do __NEXT_DATA__ (mesma lógica do parser JS)
-	@python3 scripts/extract_olx.py $(HTML) $(PAYLOAD)
+raw: $(RAW)  ## extrai apenas o JSON cru do <script id="__NEXT_DATA__">
+$(RAW): $(HTML)
+	@python3 scripts/dump_next_data.py $(HTML) $(RAW)
+
+extract: $(RAW)  ## extrai casas a partir do __NEXT_DATA__ cru (mesma lógica do parser JS)
+	@python3 scripts/extract_olx.py $(RAW) $(PAYLOAD)
 
 ingest: $(PAYLOAD)  ## envia o payload extraído para a API e formata o resultado
 	@echo "→ POST   $(API)/api/v1/ingest"
@@ -46,7 +52,7 @@ session-%:  ## detalha uma sessão (uso: make session-25)
 	@curl -sS $(API)/api/v1/sessions/$* | python3 -m json.tool
 
 clean:  ## limpa artefatos intermediários
-	@rm -rf $(OUT_DIR)/olx_live.html $(OUT_DIR)/olx_payload.json
+	@rm -rf $(HTML) $(RAW) $(PAYLOAD)
 	@echo "✓ tmp/olx_*.{html,json} removidos"
 
-.PHONY: help fetch extract ingest run sessions clean
+.PHONY: help fetch raw extract ingest run sessions clean
