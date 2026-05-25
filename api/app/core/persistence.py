@@ -1,4 +1,4 @@
-"""Persistência síncrona em Postgres via psycopg3.
+"""Persistência síncrona — escolhe Postgres ou SQLite via `app.core.db`.
 
 Estratégia: 1 conexão por chamada de ingest (volume é baixo — uma extensão
 mandando lotes manualmente). Em caso de DB indisponível ou migração não
@@ -9,83 +9,86 @@ sinaliza o estado).
 from __future__ import annotations
 
 import logging
-import os
 from typing import Optional
 
-import psycopg
+from app.core import db
 
 log = logging.getLogger(__name__)
-
-DATABASE_URL = os.environ.get("DATABASE_URL")
 
 
 def persist(domain_id: str, items: list[dict]) -> tuple[Optional[int], Optional[str]]:
     """Insere a sessão e os itens. Retorna `(session_id, None)` em sucesso,
     `(None, motivo)` quando pulado por DB indisponível/migração faltando."""
-    if not DATABASE_URL:
+    if not db.DATABASE_URL:
         return None, "DATABASE_URL not set"
     if not items:
         return None, "no items to persist"
     try:
-        with psycopg.connect(DATABASE_URL, connect_timeout=3) as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "INSERT INTO scrape_sessions (domain_name, item_count) "
-                    "VALUES (%s, %s) RETURNING id",
+        with db.connect() as conn:
+            with db.cursor(conn) as cur:
+                session_id = db.insert_returning_id(
+                    cur,
+                    "INSERT INTO scrape_sessions (domain_name, item_count) VALUES (?, ?)",
                     (domain_id, len(items)),
                 )
-                session_id = cur.fetchone()[0]
                 _insert_items(cur, domain_id, session_id, items)
         return session_id, None
-    except psycopg.OperationalError as e:
+    except db.OperationalError as e:
         log.warning("persistence skipped (db unreachable): %s", e)
         return None, f"db unreachable: {e}"
-    except psycopg.errors.UndefinedTable as e:
-        log.warning("persistence skipped (run liquibase update): %s", e)
-        return None, "tables missing — run liquibase update"
-    except psycopg.Error as e:
+    except db.DBError as e:
+        if db.is_missing_table(e):
+            log.warning("persistence skipped (run liquibase update): %s", e)
+            return None, "tables missing — run liquibase update"
         log.exception("persistence failed")
         return None, f"db error: {e}"
 
 
 def _insert_items(cur, domain_id: str, session_id: int, items: list[dict]) -> None:
-    # ON CONFLICT (external_id) WHERE external_id IS NOT NULL DO UPDATE:
-    # upsert via índice único parcial — itens sem external_id continuam
-    # inserindo normalmente (sem dedup possível).
+    # `ON CONFLICT (external_id) [WHERE …] DO UPDATE` — upsert via índice único
+    # parcial. Postgres exige o WHERE para casar com o predicado do índice;
+    # SQLite resolve o índice parcial implicitamente. `db.upsert_conflict_clause`
+    # devolve a forma certa para cada backend.
+    on_conflict = db.upsert_conflict_clause("external_id")
+
     if domain_id == "linkedin":
         cur.executemany(
-            "INSERT INTO linkedin_jobs "
-            "(session_id, external_id, job_title, company, location, url) "
-            "VALUES (%s,%s,%s,%s,%s,%s) "
-            "ON CONFLICT (external_id) WHERE external_id IS NOT NULL DO UPDATE SET "
-            "  session_id=EXCLUDED.session_id, job_title=EXCLUDED.job_title, "
-            "  company=EXCLUDED.company, location=EXCLUDED.location, url=EXCLUDED.url",
+            db.q(
+                "INSERT INTO linkedin_jobs "
+                "(session_id, external_id, job_title, company, location, url) "
+                "VALUES (?,?,?,?,?,?) "
+                f"{on_conflict} "
+                "  session_id=EXCLUDED.session_id, job_title=EXCLUDED.job_title, "
+                "  company=EXCLUDED.company, location=EXCLUDED.location, url=EXCLUDED.url"
+            ),
             [(session_id, it.get("external_id"), it.get("job_title"),
               it.get("company"), it.get("location"), it.get("url")) for it in items],
         )
     elif domain_id == "olx":
         cur.executemany(
-            "INSERT INTO olx_listings "
-            "(session_id, external_id, title, url, price, currency, listing_kind, "
-            " kind, real_estate_type, category, "
-            " neighbourhood, city, state, "
-            " posted_at, image_url, iptu, bedrooms, bathrooms, "
-            " garage_spaces, area_m2) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,"
-            "        %s,%s,%s,"
-            "        %s,%s,%s,"
-            "        %s,%s,%s,%s,%s,%s,%s) "
-            "ON CONFLICT (external_id) WHERE external_id IS NOT NULL DO UPDATE SET "
-            "  session_id=EXCLUDED.session_id, title=EXCLUDED.title, url=EXCLUDED.url, "
-            "  price=EXCLUDED.price, currency=EXCLUDED.currency, "
-            "  listing_kind=EXCLUDED.listing_kind, kind=EXCLUDED.kind, "
-            "  real_estate_type=EXCLUDED.real_estate_type, category=EXCLUDED.category, "
-            "  neighbourhood=EXCLUDED.neighbourhood, city=EXCLUDED.city, "
-            "  state=EXCLUDED.state, "
-            "  posted_at=EXCLUDED.posted_at, image_url=EXCLUDED.image_url, "
-            "  iptu=EXCLUDED.iptu, bedrooms=EXCLUDED.bedrooms, "
-            "  bathrooms=EXCLUDED.bathrooms, garage_spaces=EXCLUDED.garage_spaces, "
-            "  area_m2=EXCLUDED.area_m2",
+            db.q(
+                "INSERT INTO olx_listings "
+                "(session_id, external_id, title, url, price, currency, listing_kind, "
+                " kind, real_estate_type, category, "
+                " neighbourhood, city, state, "
+                " posted_at, image_url, iptu, bedrooms, bathrooms, "
+                " garage_spaces, area_m2) "
+                "VALUES (?,?,?,?,?,?,?,"
+                "        ?,?,?,"
+                "        ?,?,?,"
+                "        ?,?,?,?,?,?,?) "
+                f"{on_conflict} "
+                "  session_id=EXCLUDED.session_id, title=EXCLUDED.title, url=EXCLUDED.url, "
+                "  price=EXCLUDED.price, currency=EXCLUDED.currency, "
+                "  listing_kind=EXCLUDED.listing_kind, kind=EXCLUDED.kind, "
+                "  real_estate_type=EXCLUDED.real_estate_type, category=EXCLUDED.category, "
+                "  neighbourhood=EXCLUDED.neighbourhood, city=EXCLUDED.city, "
+                "  state=EXCLUDED.state, "
+                "  posted_at=EXCLUDED.posted_at, image_url=EXCLUDED.image_url, "
+                "  iptu=EXCLUDED.iptu, bedrooms=EXCLUDED.bedrooms, "
+                "  bathrooms=EXCLUDED.bathrooms, garage_spaces=EXCLUDED.garage_spaces, "
+                "  area_m2=EXCLUDED.area_m2"
+            ),
             [(session_id, it.get("external_id"), it["title"], it["url"],
               it.get("price"), it.get("currency"), it.get("listing_kind"),
               it.get("kind"), it.get("real_estate_type"), it.get("category"),
@@ -103,40 +106,48 @@ def _insert_items(cur, domain_id: str, session_id: int, items: list[dict]) -> No
         ]
         if rows:
             cur.executemany(
-                "INSERT INTO auction_items "
-                "(session_id, external_id, lot_code, title, current_bid_cents, "
-                " auction_end, url) "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s) "
-                "ON CONFLICT (external_id) WHERE external_id IS NOT NULL DO UPDATE SET "
-                "  session_id=EXCLUDED.session_id, lot_code=EXCLUDED.lot_code, "
-                "  title=EXCLUDED.title, current_bid_cents=EXCLUDED.current_bid_cents, "
-                "  auction_end=EXCLUDED.auction_end, url=EXCLUDED.url",
+                db.q(
+                    "INSERT INTO auction_items "
+                    "(session_id, external_id, lot_code, title, current_bid_cents, "
+                    " auction_end, url) "
+                    "VALUES (?,?,?,?,?,?,?) "
+                    f"{on_conflict} "
+                    "  session_id=EXCLUDED.session_id, lot_code=EXCLUDED.lot_code, "
+                    "  title=EXCLUDED.title, current_bid_cents=EXCLUDED.current_bid_cents, "
+                    "  auction_end=EXCLUDED.auction_end, url=EXCLUDED.url"
+                ),
                 rows,
             )
 
 
 def fetch_recent_sessions(limit: int = 20) -> list[dict]:
-    if not DATABASE_URL:
+    if not db.DATABASE_URL:
         return []
     try:
-        with psycopg.connect(DATABASE_URL, connect_timeout=3) as conn:
-            with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
+        with db.connect() as conn:
+            with db.dict_cursor(conn) as cur:
                 cur.execute(
-                    "SELECT id, domain_name, item_count, created_at "
-                    "FROM scrape_sessions ORDER BY id DESC LIMIT %s",
+                    db.q(
+                        "SELECT id, domain_name, item_count, created_at "
+                        "FROM scrape_sessions ORDER BY id DESC LIMIT ?"
+                    ),
                     (limit,),
                 )
                 return [
-                    {**r, "created_at": r["created_at"].isoformat() if r["created_at"] else None}
+                    {**dict(r), "created_at": db.iso(dict(r).get("created_at"))}
                     for r in cur.fetchall()
                 ]
-    except (psycopg.OperationalError, psycopg.errors.UndefinedTable):
+    except db.OperationalError:
         return []
+    except db.DBError as e:
+        if db.is_missing_table(e):
+            return []
+        raise
 
 
 def fetch_session_items(session_id: int) -> dict:
     """Retorna itens daquela sessão, buscando na tabela correta pelo domain_name."""
-    if not DATABASE_URL:
+    if not db.DATABASE_URL:
         return {}
     table_map = {
         "linkedin": "linkedin_jobs",
@@ -144,25 +155,33 @@ def fetch_session_items(session_id: int) -> dict:
         "auctions": "auction_items",
     }
     try:
-        with psycopg.connect(DATABASE_URL, connect_timeout=3) as conn:
-            with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
+        with db.connect() as conn:
+            with db.dict_cursor(conn) as cur:
                 cur.execute(
-                    "SELECT id, domain_name, item_count, created_at "
-                    "FROM scrape_sessions WHERE id=%s",
+                    db.q(
+                        "SELECT id, domain_name, item_count, created_at "
+                        "FROM scrape_sessions WHERE id=?"
+                    ),
                     (session_id,),
                 )
-                session = cur.fetchone()
-                if not session:
+                row = cur.fetchone()
+                if not row:
                     return {}
+                session = dict(row)
                 table = table_map.get(session["domain_name"])
                 if not table:
+                    session["created_at"] = db.iso(session.get("created_at"))
                     return {"session": session, "items": []}
-                cur.execute(f"SELECT * FROM {table} WHERE session_id=%s ORDER BY id", (session_id,))
+                cur.execute(db.q(f"SELECT * FROM {table} WHERE session_id=? ORDER BY id"), (session_id,))
                 items = [
-                    {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in r.items()}
+                    {k: db.iso(v) for k, v in dict(r).items()}
                     for r in cur.fetchall()
                 ]
-                session["created_at"] = session["created_at"].isoformat() if session["created_at"] else None
+                session["created_at"] = db.iso(session.get("created_at"))
                 return {"session": session, "items": items}
-    except (psycopg.OperationalError, psycopg.errors.UndefinedTable):
+    except db.OperationalError:
         return {}
+    except db.DBError as e:
+        if db.is_missing_table(e):
+            return {}
+        raise
