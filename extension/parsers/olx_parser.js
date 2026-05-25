@@ -54,6 +54,7 @@
     const title = ad.subject || ad.title || null;
     if (!title || !url || id == null) return null;
 
+    const dateRaw = ad.origListTime ?? ad.date;
     return {
       external_id: String(id),
       title: String(title),
@@ -61,7 +62,8 @@
       price_raw: ad.priceValue || null,
       listing_kind: ad.categoryName || ad.category || null,
       location: formatLocation(ad),
-      date_raw: ad.origListTime || ad.date || null,
+      // schema OLX define `date_raw` como string; origListTime vem como int.
+      date_raw: dateRaw != null ? String(dateRaw) : null,
       image_url: pickImage(ad),
       iptu_raw: findProp(ad.properties, "iptu"),
       bedrooms_raw: findProp(ad.properties, "rooms"),
