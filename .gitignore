@@ -28,3 +28,6 @@ liquibase.log
 
 # Postgres bind mount (docker-compose volume)
 data/
+
+# Scratch / dev fixtures (não vai pro repo)
+tmp/
