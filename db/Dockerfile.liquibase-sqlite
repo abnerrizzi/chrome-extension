@@ -1,0 +1,9 @@
+FROM liquibase/liquibase:4.27
+
+# A imagem oficial não inclui o driver JDBC do SQLite; adicionamos a jar do
+# xerial sqlite-jdbc no diretório de libs do Liquibase para que ele seja
+# auto-descoberto via `liquibase update` sem flags adicionais.
+USER root
+ADD https://repo1.maven.org/maven2/org/xerial/sqlite-jdbc/3.45.3.0/sqlite-jdbc-3.45.3.0.jar /liquibase/lib/sqlite-jdbc.jar
+RUN chmod 0644 /liquibase/lib/sqlite-jdbc.jar
+USER liquibase

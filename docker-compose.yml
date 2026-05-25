@@ -1,5 +1,6 @@
 services:
   db:
+    profiles: ["postgres"]
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-app}
@@ -16,6 +17,7 @@ services:
       retries: 10
 
   liquibase:
+    profiles: ["postgres"]
     image: liquibase/liquibase:4.27
     depends_on:
       db:
@@ -29,18 +31,29 @@ services:
       LIQUIBASE_COMMAND_CHANGELOG_FILE: changelog/master.xml
     command: ["update"]
 
+  liquibase-sqlite:
+    profiles: ["sqlite"]
+    build:
+      context: ./db
+      dockerfile: Dockerfile.liquibase-sqlite
+    volumes:
+      - ./db/changelog-sqlite:/liquibase/changelog
+      - ./data:/data
+    environment:
+      LIQUIBASE_COMMAND_URL: "jdbc:sqlite:/data/scraper.db"
+      LIQUIBASE_COMMAND_CHANGELOG_FILE: changelog/master.xml
+    command: ["update"]
+
   api:
     build: ./api
-    depends_on:
-      db:
-        condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@db:5432/${POSTGRES_DB:-scraper_dev}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://app:app@db:5432/scraper_dev}
       PYTHONUNBUFFERED: "1"
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:
       - ./api:/app
+      - ./data:/data
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
 volumes:
