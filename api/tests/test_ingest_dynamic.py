@@ -43,6 +43,51 @@ def test_unknown_domain_returns_404():
     assert r.status_code == 404
 
 
+def test_response_exposes_persistence_status():
+    payload = {"domain_id": "linkedin", "raw_data": {"items": [{"job_title": "Eng"}]}}
+    r = client.post("/api/v1/ingest", json=payload)
+    assert r.status_code == 200
+    body = r.json()
+    assert {"persisted", "session_id", "skipped_reason"} <= set(body.keys())
+
+
+def test_sessions_endpoint_responds():
+    r = client.get("/api/v1/sessions?limit=5")
+    assert r.status_code == 200
+    assert isinstance(r.json(), list)
+
+
+def test_external_id_upsert_dedupes_olx():
+    """Mesmo external_id em ingests separados não gera duplicata."""
+    import os
+    import psycopg
+
+    eid = "test-dedup-9999999"
+    payload = {
+        "domain_id": "olx",
+        "raw_data": {
+            "items": [{
+                "external_id": eid,
+                "title": "Casa de teste dedup",
+                "url": f"https://x/{eid}",
+                "price_raw": "R$ 100.000",
+            }],
+        },
+    }
+    r1 = client.post("/api/v1/ingest", json=payload)
+    r2 = client.post("/api/v1/ingest", json=payload)
+    assert r1.status_code == 200 and r2.status_code == 200
+
+    if not r1.json().get("persisted"):
+        return  # DB sem migrações — skip assert do banco
+
+    with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM olx_listings WHERE external_id=%s", (eid,))
+            assert cur.fetchone()[0] == 1
+            cur.execute("DELETE FROM olx_listings WHERE external_id=%s", (eid,))
+
+
 def test_olx_house_payload_full_normalization():
     payload = {
         "domain_id": "olx",

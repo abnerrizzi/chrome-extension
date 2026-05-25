@@ -64,6 +64,7 @@ def _date_to_iso(raw: Optional[str], now: Optional[datetime] = None) -> Optional
 def normalize(items: list[dict]) -> list[dict]:
     return [
         {
+            "external_id": it.get("external_id"),
             "title": (it.get("title") or "").strip(),
             "url": it.get("url"),
             "price_cents": _price_to_cents(it.get("price_raw")),

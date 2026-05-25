@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, ValidationError
 
+from app.core import persistence
 from app.core.dynamic_validator import build_item_model
 from app.core.schema_registry import SchemaNotFoundError, get_schema, list_domains
 from app.normalization import auctions as norm_auctions
@@ -60,11 +61,17 @@ def ingest(payload: IngestPayload):
     normalizer = NORMALIZERS.get(payload.domain_id, lambda xs: xs)
     normalized = normalizer(validated)
 
-    # 4. (TODO) Persistir em Postgres — fora do escopo deste scaffold.
+    # 4. Persistir no Postgres (graceful degradation: API responde 200 mesmo
+    #    se o DB estiver offline ou sem migrações aplicadas).
+    session_id, skipped_reason = persistence.persist(payload.domain_id, normalized)
+
     return {
         "domain_id": payload.domain_id,
         "received": len(items_raw),
         "validated": len(validated),
         "errors": errors,
+        "persisted": session_id is not None,
+        "session_id": session_id,
+        "skipped_reason": skipped_reason,
         "normalized": normalized,
     }

@@ -39,6 +39,7 @@
     const findDetail = (regex) => details.find((d) => regex.test(d)) || null;
 
     return {
+      external_id: idFromUrl(url),
       title,
       url,
       price_raw,
@@ -52,6 +53,17 @@
       garage_spaces_raw: findDetail(/(garagem|vaga)/i),
       area_raw:          findDetail(/(metros|m²)/i),
     };
+  }
+
+  // URL termina em "...-<id-numerico>" — ex: ".../casa-terrea-no-setor-jao-1500645324"
+  function idFromUrl(url) {
+    if (!url) return null;
+    try {
+      const tail = new URL(url).pathname.split('-').pop();
+      return /^\d+$/.test(tail) ? tail : null;
+    } catch {
+      return null;
+    }
   }
 
   function isHouse(it) {

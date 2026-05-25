@@ -4,6 +4,7 @@
   "type": "object",
   "required": ["title", "url"],
   "properties": {
+    "external_id":       { "type": "string", "description": "ID numérico extraído da URL OLX" },
     "title":             { "type": "string", "description": "Título do anúncio" },
     "url":               { "type": "string", "description": "URL canônica do anúncio" },
     "price_raw":         { "type": "string", "description": "Preço como string (R$ 2.250.000)" },

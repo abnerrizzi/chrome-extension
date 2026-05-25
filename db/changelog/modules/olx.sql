@@ -47,3 +47,12 @@ CREATE INDEX ix_olx_listings_bedrooms ON olx_listings(bedrooms);
 --rollback     DROP COLUMN IF EXISTS bathrooms,
 --rollback     DROP COLUMN IF EXISTS bedrooms,
 --rollback     DROP COLUMN IF EXISTS listing_kind;
+
+
+--changeset claude:olx-003-external-id
+--preconditions onFail:HALT onError:HALT
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='olx_listings' AND column_name='external_id'
+ALTER TABLE olx_listings ADD COLUMN external_id VARCHAR(64);
+CREATE UNIQUE INDEX uq_olx_listings_external_id ON olx_listings(external_id) WHERE external_id IS NOT NULL;
+--rollback DROP INDEX IF EXISTS uq_olx_listings_external_id;
+--rollback ALTER TABLE olx_listings DROP COLUMN IF EXISTS external_id;

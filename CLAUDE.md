@@ -42,7 +42,8 @@ The popup (`popup.js`) reads `chrome.storage.session` for the active tab, lets t
 2. `dynamic_validator.build_item_model(domain_id, schema)` walks `schema['properties']` and calls `pydantic.create_model(...)` to build a Pydantic class **at runtime**. The result is cached by SHA1 of the JSON repr so equivalent schemas reuse the same class.
 3. Each item in `raw_data.items` is validated; failures collect into an `errors` list. Returns 422 if *all* fail, otherwise 200 with partial errors surfaced.
 4. Domain-specific pure-function normalizers in `api/app/normalization/<domain>.py` transform validated dicts (e.g. OLX `"R$ 25.000,00"` → `price_cents: 2500000`; auctions `dd/mm/yyyy` → ISO-8601).
-5. Persistence to Postgres is **not yet wired** — the route returns the normalized payload. Adding it is the obvious next step; the `scrape_sessions` table + per-domain tables already exist.
+5. `app/core/persistence.py` opens a sync `psycopg` connection per request, INSERTs a `scrape_sessions` row, then bulk-inserts the per-domain rows. **Graceful degradation**: if `DATABASE_URL` is unreachable or migrations haven't been applied, the response still returns 200 with `persisted: false` and a `skipped_reason` explaining why — no crash. The extension can therefore work standalone (validation only) even without Postgres.
+6. `GET /api/v1/sessions` and `GET /api/v1/sessions/{id}` let you peek at persisted data without psql.
 
 **Adding a new domain** requires four files in lockstep:
 - `extension/parsers/<domain>_parser.js` — DOM extraction logic.
@@ -73,7 +74,7 @@ Skill at `.claude/skills/commit/SKILL.md` produces single-line Conventional Comm
 
 ## What is intentionally **not** here
 
-- Real DB persistence in the API route (route returns normalized payload only; tables exist but no INSERTs).
-- Auth on `/api/v1/ingest`.
+- Auth on `/api/v1/ingest` (anyone with the URL can POST).
 - Real extension icons (`extension/icons/*.png` are 1×1 red placeholders).
+- Connection pooling — `psycopg.connect()` per request. Fine at single-user dev scale; introduce a pool (e.g. `psycopg_pool`) if throughput becomes a concern.
 - The `dyntamic` library — `create_model` with a small hand-rolled type resolver is sufficient at current scale. Consider `dyntamic` or build-time codegen (`datamodel-code-generator`) only if schema count explodes.

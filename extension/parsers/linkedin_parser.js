@@ -2,6 +2,9 @@
 (function () {
   const cards = document.querySelectorAll('li.jobs-search-results__list-item, [data-job-id]');
   const items = Array.from(cards).map((el) => ({
+    external_id: el.getAttribute('data-job-id')
+      || el.querySelector('[data-job-id]')?.getAttribute('data-job-id')
+      || null,
     job_title: textOf(el, '.job-card-list__title, h3'),
     company: textOf(el, '.job-card-container__primary-description, h4'),
     location: textOf(el, '.job-card-container__metadata-item'),

@@ -4,6 +4,7 @@
   "type": "object",
   "required": ["job_title"],
   "properties": {
+    "external_id": { "type": "string", "description": "data-job-id do card" },
     "job_title": { "type": "string", "description": "Cargo da vaga" },
     "company":   { "type": "string", "description": "Empresa contratante" },
     "location":  { "type": "string", "description": "Localização" },

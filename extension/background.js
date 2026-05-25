@@ -41,6 +41,37 @@ chrome.runtime.onStartup.addListener(() => {
   registerAllParsers().catch((err) => console.error("register error", err));
 });
 
+function urlMatchesDomain(url, domain) {
+  if (!url) return false;
+  return domain.matches.some((pattern) => {
+    const rx = new RegExp(
+      "^" +
+        pattern
+          .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+          .replace(/\*/g, ".*") +
+        "$"
+    );
+    return rx.test(url);
+  });
+}
+
+// SPA pagination: pushState/replaceState não dispara um novo document, então
+// os content scripts registrados não rodam de novo. Re-injetamos manualmente.
+chrome.webNavigation.onHistoryStateUpdated.addListener(async (details) => {
+  if (details.frameId !== 0) return;
+  const domain = DOMAIN_REGISTRY.find((d) => urlMatchesDomain(details.url, d));
+  if (!domain) return;
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: details.tabId },
+      files: domain.js,
+    });
+  } catch (err) {
+    // Silenciar: pode falhar em URLs sem permissão de host ainda concedida.
+    console.debug("SPA re-inject skipped:", err.message);
+  }
+});
+
 async function setBadge(tabId, count) {
   if (typeof tabId !== "number") return;
   if (!count || count <= 0) {

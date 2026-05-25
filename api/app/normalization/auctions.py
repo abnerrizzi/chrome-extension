@@ -35,6 +35,7 @@ def _to_iso(raw: Optional[str]) -> Optional[str]:
 def normalize(items: list[dict]) -> list[dict]:
     return [
         {
+            "external_id": it.get("external_id") or (it.get("lot_code") or "").strip() or None,
             "lot_code": (it.get("lot_code") or "").strip(),
             "title": (it.get("title") or "").strip(),
             "current_bid_cents": _bid_to_cents(it.get("current_bid_raw")),

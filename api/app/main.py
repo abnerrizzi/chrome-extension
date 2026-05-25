@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import ingest
+from app.routers import ingest, sessions
 
 app = FastAPI(
     title="Modular Ingest API",
@@ -18,6 +18,7 @@ app.add_middleware(
 )
 
 app.include_router(ingest.router, prefix="/api/v1")
+app.include_router(sessions.router, prefix="/api/v1")
 
 
 @app.get("/healthz")

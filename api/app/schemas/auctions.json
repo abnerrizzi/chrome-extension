@@ -4,6 +4,7 @@
   "type": "object",
   "required": ["lot_code", "title"],
   "properties": {
+    "external_id":     { "type": "string", "description": "Alias do lot_code para dedup" },
     "lot_code":        { "type": "string", "description": "Identificador do lote" },
     "title":           { "type": "string", "description": "Título do lote" },
     "current_bid_raw": { "type": "string", "description": "Lance atual como string localizada" },

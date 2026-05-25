@@ -16,3 +16,12 @@ CREATE TABLE linkedin_jobs (
     created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 --rollback DROP TABLE IF EXISTS linkedin_jobs;
+
+
+--changeset claude:linkedin-002-external-id
+--preconditions onFail:HALT onError:HALT
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='linkedin_jobs' AND column_name='external_id'
+ALTER TABLE linkedin_jobs ADD COLUMN external_id VARCHAR(64);
+CREATE UNIQUE INDEX uq_linkedin_jobs_external_id ON linkedin_jobs(external_id) WHERE external_id IS NOT NULL;
+--rollback DROP INDEX IF EXISTS uq_linkedin_jobs_external_id;
+--rollback ALTER TABLE linkedin_jobs DROP COLUMN IF EXISTS external_id;
