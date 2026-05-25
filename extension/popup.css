@@ -51,6 +51,17 @@ button:disabled {
   background: #555;
   cursor: not-allowed;
 }
+.link {
+  display: block;
+  margin-top: 8px;
+  font-size: 11px;
+  color: #888;
+  text-decoration: none;
+  text-align: center;
+}
+.link:hover {
+  color: #ccc;
+}
 .status {
   margin-top: 10px;
   font-size: 11px;
