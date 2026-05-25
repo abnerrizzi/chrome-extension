@@ -32,6 +32,15 @@ async function getApiBase() {
   return apiUrl.replace(/\/+$/, "");
 }
 
+async function getAutoSend() {
+  const { autoSend } = await chrome.storage.sync.get({ autoSend: false });
+  return !!autoSend;
+}
+
+async function setAutoSend(on) {
+  await chrome.storage.sync.set({ autoSend: !!on });
+}
+
 function setStatus(state, label) {
   $statusPill.dataset.state = state;
   $apiLabel.textContent = label;
@@ -208,4 +217,14 @@ document.getElementById("open-options").addEventListener("click", (e) => {
   chrome.runtime.openOptionsPage();
 });
 
+async function initModeRadios() {
+  const on = await getAutoSend();
+  const target = document.querySelector(`input[name="autosend"][value="${on ? "on" : "off"}"]`);
+  if (target) target.checked = true;
+  document.querySelectorAll('input[name="autosend"]').forEach((el) => {
+    el.addEventListener("change", () => setAutoSend(el.value === "on"));
+  });
+}
+
+initModeRadios();
 load();

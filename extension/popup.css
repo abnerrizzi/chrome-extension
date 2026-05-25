@@ -130,6 +130,53 @@ body {
 .dv { color: var(--success); word-break: break-all; }
 .dv-err { color: var(--error); }
 
+/* ---------- send.mode (radios) ---------- */
+.mode {
+  border: 0;
+  margin: 0;
+  padding: 6px 0 4px;
+  border-top: 1px dashed var(--border);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.mode-legend {
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  color: var(--dim);
+  padding: 0 6px 0 0;
+  text-transform: lowercase;
+}
+.radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--dim);
+  cursor: pointer;
+  user-select: none;
+}
+.radio input { position: absolute; opacity: 0; pointer-events: none; }
+.radio-mark {
+  width: 10px; height: 10px;
+  border: 1px solid var(--muted);
+  border-radius: 50%;
+  position: relative;
+  flex: 0 0 auto;
+}
+.radio input:checked + .radio-mark {
+  border-color: var(--accent);
+}
+.radio input:checked + .radio-mark::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  background: var(--accent);
+  border-radius: 50%;
+}
+.radio input:checked ~ .radio-label { color: var(--accent); }
+.radio input:focus-visible + .radio-mark { box-shadow: 0 0 0 2px var(--accent); }
+
 /* ---------- footer (button + endpoint) ---------- */
 .ftr {
   margin-top: 12px;

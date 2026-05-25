@@ -83,6 +83,43 @@ async function setBadge(tabId, count) {
   await chrome.action.setBadgeText({ text: String(count), tabId });
 }
 
+function payloadHash(domain, items) {
+  // Identidade do snapshot: domínio + lista de external_id (estável entre
+  // re-injeções e MutationObserver no mesmo conteúdo).
+  const ids = (items || [])
+    .map((i) => (i && i.external_id != null ? String(i.external_id) : ""))
+    .join(",");
+  return `${domain}|${ids}`;
+}
+
+async function autoSendIfEnabled(tabId, domain, items) {
+  if (!Array.isArray(items) || items.length === 0) return;
+  const { autoSend, apiUrl } = await chrome.storage.sync.get({
+    autoSend: false,
+    apiUrl: "http://localhost:8000",
+  });
+  if (!autoSend) return;
+
+  const hash = payloadHash(domain, items);
+  const lastKey = `tab:${tabId}:lastSentHash`;
+  const last = (await chrome.storage.session.get(lastKey))[lastKey];
+  if (last === hash) return; // dedupe — já enviado este snapshot
+
+  const base = apiUrl.replace(/\/+$/, "");
+  try {
+    const res = await fetch(`${base}/api/v1/ingest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ domain_id: domain, raw_data: { items } }),
+    });
+    const body = await res.json().catch(() => ({}));
+    await chrome.storage.session.set({ [lastKey]: hash });
+    console.info(`[auto-send] ${domain} status=${res.status} session=${body.session_id ?? "-"}`);
+  } catch (err) {
+    console.warn("[auto-send] falhou:", err.message);
+  }
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || msg.type !== "DOM_COUNT") return false;
   const tabId = sender.tab && sender.tab.id;
@@ -99,6 +136,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         capturedAt: Date.now(),
       },
     });
+    autoSendIfEnabled(tabId, msg.domain, msg.items || []).catch((err) =>
+      console.error("autoSend", err),
+    );
   }
   sendResponse({ ok: true });
   return true;
@@ -106,5 +146,5 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 // Limpa storage da aba quando ela é fechada (o badge é zerado automaticamente pelo Chromium).
 chrome.tabs.onRemoved.addListener((tabId) => {
-  chrome.storage.session.remove(`tab:${tabId}`).catch(() => {});
+  chrome.storage.session.remove([`tab:${tabId}`, `tab:${tabId}:lastSentHash`]).catch(() => {});
 });
