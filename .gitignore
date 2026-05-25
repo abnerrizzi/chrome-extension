@@ -25,3 +25,6 @@ build/
 
 # Liquibase
 liquibase.log
+
+# Postgres bind mount (docker-compose volume)
+data/
