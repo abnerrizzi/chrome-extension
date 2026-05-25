@@ -64,7 +64,14 @@ function previewFields(domain, item) {
       meta:  item.lot_code || shortenUrl(item.url),
     };
   }
-  // olx + default
+  if (domain === "olx") {
+    return {
+      title: item.title || "",
+      price: item.price_raw || "",
+      meta:  [item.kind, shortenUrl(item.url)].filter(Boolean).join(" · "),
+    };
+  }
+  // default
   return {
     title: item.title || "",
     price: item.price_raw || "",
