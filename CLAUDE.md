@@ -4,27 +4,54 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Stack & runtime model
 
-Everything except the Chrome extension itself runs in **Docker Compose**. There is intentionally no local Python/Postgres/Liquibase install required. Three services in `docker-compose.yml`:
+Everything except the Chrome extension itself runs in **Docker Compose**. There is intentionally no local Python/Postgres/SQLite/Liquibase install required.
 
-- `db` — `postgres:16-alpine`, exposes 5432, healthchecked. Data lives on a host bind mount at `./data/pgdata` (ignored by git).
-- `api` — built from `./api/Dockerfile` (FastAPI + Pydantic v2 + psycopg3 + uvicorn). Mounts `./api` for hot-reload via `--reload`. Depends on `db` healthy.
-- `liquibase` — `liquibase/liquibase:4.27`. Run on-demand via `docker compose run --rm liquibase <cmd>`. Mounts `./db/changelog` as `/liquibase/changelog`. Connection env baked in via `LIQUIBASE_COMMAND_*`.
+**Dual-backend.** The persistence layer supports Postgres **or** SQLite, chosen at API process start from the `DATABASE_URL` scheme (`postgresql://…` → psycopg3; `sqlite:///…` or a bare path → stdlib `sqlite3`). The dialect shim lives at `api/app/core/db.py`; `persistence.py` authors SQL with `?` placeholders and wraps every statement in `db.q(...)` which rewrites to `%s` on Postgres. Upserts go through `db.upsert_conflict_clause("external_id")` — both backends require the `WHERE external_id IS NOT NULL` predicate in the conflict target to match the partial unique index (SQLite rejects the upsert with "ON CONFLICT clause does not match …" otherwise). `db.insert_returning_id` handles the `RETURNING id` ↔ `lastrowid` split.
+
+Both backends use Liquibase, with parallel changelog trees that must stay in lockstep:
+
+- `db/changelog/`        — Postgres flavor (BIGSERIAL, JSONB, TIMESTAMPTZ, `information_schema` preconditions).
+- `db/changelog-sqlite/` — SQLite flavor (INTEGER PK AUTOINCREMENT, TEXT, `sqlite_master`/`pragma_table_info` preconditions). Custom image at `db/Dockerfile.liquibase-sqlite` bundles the xerial `sqlite-jdbc` jar.
+
+Same changeset IDs across trees — when adding/altering a column, edit **both** files in the same commit.
+
+Compose services, gated by profiles:
+
+- `db` (profile `postgres`) — `postgres:16-alpine`, exposes 5432, healthchecked. Data at `./data/pgdata` (gitignored).
+- `liquibase` (profile `postgres`) — official `liquibase/liquibase:4.27`, runs `db/changelog/master.xml`.
+- `liquibase-sqlite` (profile `sqlite`) — built from `db/Dockerfile.liquibase-sqlite`, runs `db/changelog-sqlite/master.xml` against `/data/scraper.db` (host bind: `./data:/data`, gitignored). The Dockerfile pins **sqlite-jdbc 3.41.2.2** — the last release before xerial made `slf4j-api` a hard runtime dep that the official Liquibase image doesn't ship; newer jars crash on init with `NoClassDefFoundError: org/slf4j/LoggerFactory`. The container runs as `root` so it can write the bind-mounted DB file regardless of who created `./data/`.
+- `api` (no profile — always available) — FastAPI + Pydantic v2 + psycopg3 + uvicorn. Mounts `./api` for hot-reload and `./data` so SQLite persists outside the container.
 
 The Chrome extension is loaded manually in `chrome://extensions → Load unpacked → ./extension`. It talks to `http://localhost:8000` by default, but the URL is **configurable per-user** via the options page (see "MV3 specifics").
 
 ## Common commands
 
 ```bash
-cp .env.example .env                            # one-time
-docker compose up -d db                         # bring up DB
-docker compose run --rm liquibase update        # apply migrations
-docker compose run --rm liquibase rollback-count 1   # revert last changeset
-./scripts/tag_release.sh v1                     # tag DB state
+cp .env.example .env                            # one-time — escolha DATABASE_URL aqui
+
+# Postgres path:
+make up-postgres                                # db + liquibase update + api
+docker compose --profile postgres run --rm liquibase rollback-count 1
+./scripts/tag_release.sh v1                     # default backend=postgres
+docker compose exec db psql -U app scraper_dev  # psql shell
+
+# SQLite path (sem Postgres no host):
+make up-sqlite                                  # liquibase-sqlite update + api
+docker compose --profile sqlite run --rm liquibase-sqlite rollback-count 1
+./scripts/tag_release.sh --backend sqlite v1
+sqlite3 data/scraper.db                         # shell SQLite
+
+# Comum:
 docker compose up -d api                        # start API at :8000
 docker compose run --rm api pytest              # run all tests
-docker compose run --rm api pytest tests/test_ingest_dynamic.py::test_olx_house_payload_full_normalization  # single test
-docker compose exec db psql -U app scraper_dev  # psql shell
-docker compose down -v                          # stop containers (preserves ./data/pgdata bind mount)
+docker compose run --rm api pytest tests/test_ingest_dynamic.py::test_olx_house_payload_full_normalization
+make down                                       # para tudo de ambos os perfis (mantém binds ./data e ./data/pgdata)
+
+# Rodar pytest contra um backend específico (sobrescreve DATABASE_URL):
+docker compose run --rm -e DATABASE_URL=sqlite:////data/scraper.db -v "$(pwd)/data:/data" api pytest
+docker compose run --rm -e DATABASE_URL=postgresql://app:app@db:5432/scraper_dev api pytest
+# O test_external_id_upsert_dedupes_olx só exercita o roundtrip real quando as migrações estão aplicadas
+# no backend ativo; sem schema, ele degrada para um no-op (persisted=false).
 ```
 
 There's also a **Make pipeline** that mirrors the extension end-to-end without Chrome — see "Make pipeline" below. API docs at `http://localhost:8000/docs`.
@@ -42,7 +69,7 @@ The popup (`popup.js`) reads `chrome.storage.session` for the active tab, render
 2. `dynamic_validator.build_item_model(domain_id, schema)` walks `schema['properties']` and calls `pydantic.create_model(...)` to build a Pydantic class **at runtime**. The result is cached by SHA1 of the JSON repr so equivalent schemas reuse the same class.
 3. Each item is validated; failures collect into an `errors` list. Returns 422 if *all* fail, 200 with partial errors otherwise.
 4. Pure-function normalizers in `api/app/normalization/<domain>.py` transform validated dicts (e.g. OLX `"R$ 2.250.000"` → `price: 2250000.0` stored as `NUMERIC(12,2)`; epoch seconds → ISO-8601; `"3 quartos"` → `3`).
-5. `app/core/persistence.py` opens a sync `psycopg` connection per request, INSERTs a `scrape_sessions` row, then **UPSERTs** per-domain rows via `ON CONFLICT (external_id) WHERE external_id IS NOT NULL DO UPDATE SET …` — dedup is per-domain, partial unique index allows items without `external_id` to coexist. **Graceful degradation**: if `DATABASE_URL` is unreachable or migrations haven't run, the response still returns 200 with `persisted: false` and a `skipped_reason`.
+5. `app/core/persistence.py` opens a sync connection per request through `app.core.db.connect()` (psycopg3 on Postgres, stdlib `sqlite3` on SQLite). It INSERTs a `scrape_sessions` row, then **UPSERTs** per-domain rows via `ON CONFLICT (external_id) WHERE external_id IS NOT NULL DO UPDATE SET …` — same form on both backends (each requires the `WHERE` predicate to match the partial unique index). Dedup is per-domain; the partial index lets items without `external_id` coexist. **Graceful degradation**: if `DATABASE_URL` is unreachable or migrations haven't run, the response still returns 200 with `persisted: false` and a `skipped_reason`.
 6. `GET /api/v1/sessions` + `GET /api/v1/sessions/{id}` expose the persisted data over HTTP.
 
 **Adding a new domain** requires five files in lockstep:
@@ -50,7 +77,7 @@ The popup (`popup.js`) reads `chrome.storage.session` for the active tab, render
 - `extension/background.js → DOMAIN_REGISTRY` — registers the parser for the URL pattern.
 - `api/app/schemas/<domain>.json` — JSON Schema (drives the dynamic Pydantic model). Include `external_id` as an optional string for dedup.
 - `api/app/normalization/<domain>.py` — pure normalizer; register it in `routers/ingest.py:NORMALIZERS`.
-- `db/changelog/modules/<domain>.sql` — Liquibase Formatted SQL changesets (table + a follow-up `<domain>-NNN-external-id` that adds the column + partial unique index). Include in `db/changelog/master.xml`. Wire INSERT/UPSERT in `core/persistence.py:_insert_items`.
+- `db/changelog/modules/<domain>.sql` **and** `db/changelog-sqlite/modules/<domain>.sql` — Liquibase Formatted SQL changesets (table + a follow-up `<domain>-NNN-external-id` that adds the column + partial unique index). Same changeset IDs in both trees; include in the respective `master.xml`. Wire INSERT/UPSERT in `core/persistence.py:_insert_items` using `?` placeholders + `db.q()`.
 
 ## OLX specifics
 
@@ -84,13 +111,13 @@ make session-<N> → GET /api/v1/sessions/<N>  (detail with items)
 
 ## Database conventions
 
-Migrations are **Liquibase Formatted SQL** (`db/changelog/modules/*.sql`) orchestrated by `db/changelog/master.xml`. The master remains XML because Formatted SQL has no native `--include`. Every changeset must include:
-- `--preconditions onFail:HALT onError:HALT` + a `--precondition-sql-check` (typically `expectedResult:0 SELECT count(*) FROM information_schema.{tables|columns} WHERE …`).
+Migrations are **Liquibase Formatted SQL**, kept in **two parallel trees** — `db/changelog/modules/*.sql` (Postgres) and `db/changelog-sqlite/modules/*.sql` (SQLite) — each orchestrated by its own `master.xml`. The masters remain XML because Formatted SQL has no native `--include`. Every changeset must include:
+- `--preconditions onFail:HALT onError:HALT` + a `--precondition-sql-check`. The query differs per tree: Postgres uses `information_schema.{tables|columns}`; SQLite uses `sqlite_master` for tables and `pragma_table_info('<table>')` for columns.
 - `--rollback` lines that fully undo the changeset.
 
-For `external_id` dedup, the pattern is a **partial unique index**: `CREATE UNIQUE INDEX uq_<table>_external_id ON <table>(external_id) WHERE external_id IS NOT NULL;`. The persistence layer leverages this in `ON CONFLICT (external_id) WHERE external_id IS NOT NULL DO UPDATE`.
+For `external_id` dedup, the pattern is a **partial unique index** in both dialects: `CREATE UNIQUE INDEX uq_<table>_external_id ON <table>(external_id) WHERE external_id IS NOT NULL;` (SQLite supports the partial WHERE since 3.8). The persistence layer leverages this with `ON CONFLICT (external_id) WHERE external_id IS NOT NULL DO UPDATE` — the same form on both backends, because each requires the conflict target to repeat the index predicate. `db.upsert_conflict_clause` keeps the wording in one place.
 
-Postgres-only: types are hardcoded (`BIGSERIAL`, `JSONB`, `TIMESTAMPTZ`) since the XML `<property>` substitution layer was dropped during the SQL conversion (`refactor(db): converte changelogs liquibase de xml para sql`).
+Type mapping conventions (Postgres tree → SQLite tree): `BIGSERIAL PRIMARY KEY` → `INTEGER PRIMARY KEY AUTOINCREMENT`; `BIGINT` → `INTEGER`; `VARCHAR(n)` → `TEXT`; `JSONB` → `TEXT`; `TIMESTAMPTZ` → `TEXT` (ISO-8601 via `CURRENT_TIMESTAMP`); `NUMERIC(p,s)` → `NUMERIC`; `DEFAULT NOW()` → `DEFAULT CURRENT_TIMESTAMP`. SQLite only allows one `ADD COLUMN` per `ALTER TABLE`, so multi-column ALTERs are split into one statement per column.
 
 ## MV3 specifics
 
@@ -115,6 +142,6 @@ Skill at `.claude/skills/commit/SKILL.md` produces single-line Conventional Comm
 
 - Auth on `/api/v1/ingest` (anyone with the URL can POST).
 - Real extension icons (`extension/icons/*.png` are 1×1 red placeholders).
-- Connection pooling — `psycopg.connect()` per request. Fine at single-user dev scale; introduce `psycopg_pool` if throughput becomes a concern.
+- Connection pooling — `db.connect()` opens one connection per request (psycopg or sqlite3). Fine at single-user dev scale; introduce `psycopg_pool` (or a SQLite write-serializer) if throughput becomes a concern.
 - The `dyntamic` library — `pydantic.create_model` with a small hand-rolled type resolver is sufficient at current scale. Consider `dyntamic` or build-time codegen (`datamodel-code-generator`) only if schema count explodes.
 - IBM Plex fonts — the popup design (`extension/design/`, gitignored) uses IBM Plex Sans, but the shipped popup falls back to `ui-monospace` to keep the extension bundle lean.

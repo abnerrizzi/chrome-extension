@@ -1,0 +1,16 @@
+FROM liquibase/liquibase:4.27
+
+# A imagem oficial não inclui o driver JDBC do SQLite; adicionamos a jar do
+# xerial sqlite-jdbc no diretório de libs do Liquibase para que ele seja
+# auto-descoberto via `liquibase update` sem flags adicionais.
+#
+# Pino: 3.41.2.2 é a última release **antes** de o xerial passar a exigir
+# slf4j-api como dependência explícita (a partir de 3.42 a inicialização da
+# JDBC quebra com NoClassDefFoundError na imagem padrão do Liquibase).
+# 3.41 ainda traz SQLite 3.41 — suporte completo a `ALTER TABLE … DROP COLUMN`
+# e índices únicos parciais, que é o que os changesets exigem.
+USER root
+ADD https://repo1.maven.org/maven2/org/xerial/sqlite-jdbc/3.41.2.2/sqlite-jdbc-3.41.2.2.jar /liquibase/lib/sqlite-jdbc.jar
+RUN chmod 0644 /liquibase/lib/sqlite-jdbc.jar
+# Container one-shot de migração — fica como root para escrever no bind mount
+# `./data/` mesmo quando ele foi criado por outro container (ex.: postgres).

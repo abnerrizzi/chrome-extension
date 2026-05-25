@@ -3,11 +3,11 @@
 Ecossistema ponta-a-ponta para extrair, validar e persistir dados de páginas web modularmente:
 
 - **Chrome Extension (MV3)** — content scripts dinâmicos por domínio. No OLX, lê `__NEXT_DATA__` (não o DOM renderizado) e mostra contagem no badge estilo AdBlock. Popup em visual terminal.
-- **API (FastAPI + Pydantic v2)** — `POST /api/v1/ingest` valida com modelo Pydantic **gerado em runtime** a partir do JSON Schema do domínio, normaliza (preço → cents, datas → ISO-8601) e faz upsert no Postgres por `external_id`.
-- **PostgreSQL + Liquibase** — changelogs em SQL formatado, modulares por domínio (`core`, `linkedin`, `olx`, `auctions`), com `<rollback>` e `<preCondition>` por changeset.
+- **API (FastAPI + Pydantic v2)** — `POST /api/v1/ingest` valida com modelo Pydantic **gerado em runtime** a partir do JSON Schema do domínio, normaliza (preço → cents, datas → ISO-8601) e faz upsert no banco por `external_id`.
+- **PostgreSQL ou SQLite + Liquibase** — backend escolhido pelo scheme do `DATABASE_URL` (`postgresql://…` ou `sqlite:///…`). Changelogs em SQL formatado, modulares por domínio (`core`, `linkedin`, `olx`, `auctions`), com `<rollback>` e `<preCondition>` por changeset, **espelhados** em `db/changelog/` (Postgres) e `db/changelog-sqlite/` (SQLite).
 - **Makefile** — pipeline CLI que espelha exatamente a extensão (`fetch` → `extract` → `ingest`), útil pra testar sem abrir o Chrome.
 
-Tudo (exceto o navegador) roda em containers via `docker compose`. Sem nenhum Python/Postgres/Liquibase instalado no host.
+Tudo (exceto o navegador) roda em containers via `docker compose`. Sem nenhum Python/Postgres/SQLite/Liquibase instalado no host.
 
 ---
 
@@ -19,13 +19,23 @@ Tudo (exceto o navegador) roda em containers via `docker compose`. Sem nenhum Py
 - Google Chrome (apenas pra carregar a extensão; o restante é container)
 - `make` no host (para o pipeline CLI)
 
-### 1. Bootstrap (uma vez)
+### 1. Escolha um backend (Postgres ou SQLite)
+
+A seleção é por `DATABASE_URL` + perfil do Compose:
+
+| Backend  | `DATABASE_URL`                       | Perfil compose | Bootstrap                 |
+|----------|--------------------------------------|----------------|---------------------------|
+| Postgres | `postgresql://app:app@db:5432/scraper_dev` | `postgres`     | `make up-postgres`        |
+| SQLite   | `sqlite:////data/scraper.db`         | `sqlite`       | `make up-sqlite`          |
 
 ```bash
-cp .env.example .env                           # POSTGRES_USER/PASSWORD/DB
-docker compose up -d db                        # Postgres em :5432
-docker compose run --rm liquibase update       # cria 4 tabelas + índices/UPSERT
-docker compose up -d api                       # FastAPI em :8000  |  /docs
+cp .env.example .env                           # ajusta DATABASE_URL ao backend escolhido
+
+# Postgres (default):
+make up-postgres                               # db + liquibase update + api
+
+# OU SQLite (sem Postgres no host):
+make up-sqlite                                 # liquibase-sqlite update + api
 ```
 
 Sanity check: `curl -s http://localhost:8000/healthz` deve devolver `{"status":"ok"}`.
@@ -57,16 +67,18 @@ O `make fetch` usa `lwthiker/curl-impersonate` em container — mesmo TLS finger
 docker compose run --rm api pytest                                # roda todos os testes
 docker compose run --rm api pytest tests/test_ingest_dynamic.py::test_olx_house_payload_full_normalization
 
-docker compose run --rm liquibase rollback-count 1                # reverte último changeset
-docker compose run --rm liquibase status --verbose                # changesets pendentes
-./scripts/tag_release.sh v3                                       # tag versão do schema no banco
+docker compose --profile postgres run --rm liquibase rollback-count 1   # Postgres: reverte
+docker compose --profile sqlite  run --rm liquibase-sqlite rollback-count 1   # SQLite: reverte
+docker compose --profile postgres run --rm liquibase status --verbose   # pendentes (Postgres)
+./scripts/tag_release.sh v3                                       # tag schema (Postgres, default)
+./scripts/tag_release.sh --backend sqlite v3                      # tag schema (SQLite)
 
-docker compose exec db psql -U app scraper_dev                    # psql interativo
-docker compose exec db psql -U app scraper_dev -c '\dt'           # lista tabelas
+docker compose exec db psql -U app scraper_dev                    # Postgres: psql interativo
+sqlite3 data/scraper.db                                           # SQLite: shell interativo
 
 docker compose logs -f api                                        # tail da API
-docker compose down                                               # para tudo (mantém volumes)
-docker compose down -v                                            # para e apaga volumes
+make down                                                         # para tudo (todos os perfis)
+docker compose --profile postgres down -v                         # para Postgres e apaga volumes
 ```
 
 ---
@@ -74,12 +86,12 @@ docker compose down -v                                            # para e apaga
 ## Arquitetura
 
 ```
-┌────────────────┐   POST /api/v1/ingest    ┌──────────────────┐    INSERT/UPSERT  ┌───────────┐
-│ Chrome MV3 ext │ ───────────────────────▶ │ FastAPI          │ ────────────────▶ │ Postgres  │
-│ - background.js│  {domain_id, raw_data}   │ - dynamic_validat│  via psycopg3     │           │
-│ - parsers/*.js │                          │ - normalization/ │  ON CONFLICT      │ Liquibase │
-│ - popup.html   │                          │ - persistence    │  (external_id)    │ changelog │
-└────────────────┘                          └──────────────────┘                   └───────────┘
+┌────────────────┐   POST /api/v1/ingest    ┌──────────────────┐    INSERT/UPSERT  ┌─────────────────┐
+│ Chrome MV3 ext │ ───────────────────────▶ │ FastAPI          │ ────────────────▶ │ Postgres        │
+│ - background.js│  {domain_id, raw_data}   │ - dynamic_validat│  via db dialect   │   ou            │
+│ - parsers/*.js │                          │ - normalization/ │  shim (psycopg3   │ SQLite (stdlib) │
+│ - popup.html   │                          │ - persistence    │  ou sqlite3)      │ Liquibase       │
+└────────────────┘                          └──────────────────┘                   └─────────────────┘
         ▲                                            ▲
         │ chrome.scripting.registerContentScripts   │ schemas/<domain>.json
         │ (re-injeta em pushState do SPA)            │ + pydantic.create_model()
@@ -102,7 +114,8 @@ Cinco arquivos em lockstep:
 | `extension/background.js → DOMAIN_REGISTRY` | URL match para registrar o parser |
 | `api/app/schemas/<domain>.json` | JSON Schema (vira modelo Pydantic em runtime) |
 | `api/app/normalization/<domain>.py` | Função pura `normalize(items) -> items` |
-| `db/changelog/modules/<domain>.sql` | `--changeset` + `--rollback`; incluir no `master.xml` |
+| `db/changelog/modules/<domain>.sql` | `--changeset` + `--rollback` Postgres; incluir no `master.xml` |
+| `db/changelog-sqlite/modules/<domain>.sql` | Espelho SQLite (manter em lockstep com o Postgres) |
 
 Em `api/app/routers/ingest.py` adicionar o domínio em `NORMALIZERS` e em `core/persistence.py` o INSERT/UPSERT correspondente.
 
