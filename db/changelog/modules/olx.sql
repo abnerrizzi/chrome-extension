@@ -97,3 +97,16 @@ ALTER TABLE olx_listings
 --rollback ALTER TABLE olx_listings
 --rollback     DROP COLUMN IF EXISTS price,
 --rollback     DROP COLUMN IF EXISTS iptu;
+
+
+--changeset claude:olx-006-drop-unused-columns
+--preconditions onFail:HALT onError:HALT
+--precondition-sql-check expectedResult:1 SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='olx_listings' AND column_name='latitude'
+ALTER TABLE olx_listings
+    DROP COLUMN latitude,
+    DROP COLUMN longitude,
+    DROP COLUMN images;
+--rollback ALTER TABLE olx_listings
+--rollback     ADD COLUMN latitude  NUMERIC(9,6),
+--rollback     ADD COLUMN longitude NUMERIC(9,6),
+--rollback     ADD COLUMN images    JSONB;
