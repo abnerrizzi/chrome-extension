@@ -8,6 +8,29 @@ and this project loosely follows [Semantic Versioning](https://semver.org/spec/v
 Versions track `extension/manifest.json#version`. Database changes reference the
 Liquibase changeset id (e.g. `olx-004`).
 
+## [Unreleased]
+
+### Added
+- **Backend SQLite alternativo** ao Postgres, escolhido pelo scheme do
+  `DATABASE_URL` (`postgresql://…` vs `sqlite:///…`). Shim de dialeto em
+  `api/app/core/db.py` traduz placeholders, `ON CONFLICT` e `RETURNING/lastrowid`.
+- `db/changelog-sqlite/` — espelho dos changesets Postgres em sintaxe SQLite
+  (`INTEGER PRIMARY KEY AUTOINCREMENT`, `TEXT`, preconditions via
+  `sqlite_master` / `pragma_table_info`).
+- `db/Dockerfile.liquibase-sqlite` — imagem Liquibase com `sqlite-jdbc` empacotado.
+- Perfis Docker Compose `postgres` e `sqlite`; targets `make up-postgres`,
+  `make up-sqlite`, `make down`.
+- `./scripts/tag_release.sh --backend postgres|sqlite` (default `postgres`).
+- `api/tests/test_db_dialect.py` cobrindo detecção de backend, reescrita de
+  placeholders e cláusula de upsert.
+
+### Changed
+- `api/app/core/persistence.py` reescrito sobre o shim — SQL agora usa `?` e
+  passa por `db.q()`.
+- `api/tests/test_ingest_dynamic.py` faz cleanup via `db.connect()`/`db.q()`
+  em vez de `psycopg` direto, rodando contra qualquer backend.
+- `README.md` e `CLAUDE.md` documentam a seleção dual-backend.
+
 ## [0.3.1] — 2026-05-25
 
 ### Added

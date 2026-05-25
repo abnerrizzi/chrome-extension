@@ -26,6 +26,14 @@
 - [x] ST-013 Modelagem do Módulo Core + rollbacks
 - [x] ST-014 Processos Imutáveis CI/CD (tagging + `<preCondition>`)
 
+## EPIC-005 — Backend SQLite paralelo ao Postgres
+- [x] ST-015 Shim de dialeto `api/app/core/db.py` (postgres/sqlite)
+- [x] ST-016 `persistence.py` usa shim (placeholders `?`, upsert genérico)
+- [x] ST-017 Espelho `db/changelog-sqlite/` com pré-condições `sqlite_master`/`pragma_table_info`
+- [x] ST-018 Perfis Compose `postgres`/`sqlite` + imagem Liquibase com sqlite-jdbc
+- [x] ST-019 Targets `make up-postgres`/`up-sqlite`/`down` e `tag_release.sh --backend`
+- [x] ST-020 Cobertura de testes (`test_db_dialect.py` + dedup via shim)
+
 ## Infraestrutura transversal
 - [x] Docker Compose orquestrando db + api + liquibase
 - [x] Skill `/commit` Conventional Commits (1-linha ≤75 chars)
