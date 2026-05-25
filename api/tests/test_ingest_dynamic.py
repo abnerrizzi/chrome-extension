@@ -67,8 +67,7 @@ def test_olx_accepts_iso_and_epoch_dates():
 
 def test_external_id_upsert_dedupes_olx():
     """Mesmo external_id em ingests separados não gera duplicata."""
-    import os
-    import psycopg
+    from app.core import db
 
     eid = "test-dedup-9999999"
     payload = {
@@ -89,11 +88,11 @@ def test_external_id_upsert_dedupes_olx():
     if not r1.json().get("persisted"):
         return  # DB sem migrações — skip assert do banco
 
-    with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT count(*) FROM olx_listings WHERE external_id=%s", (eid,))
+    with db.connect() as conn:
+        with db.cursor(conn) as cur:
+            cur.execute(db.q("SELECT count(*) FROM olx_listings WHERE external_id=?"), (eid,))
             assert cur.fetchone()[0] == 1
-            cur.execute("DELETE FROM olx_listings WHERE external_id=%s", (eid,))
+            cur.execute(db.q("DELETE FROM olx_listings WHERE external_id=?"), (eid,))
 
 
 def test_olx_house_payload_full_normalization():
