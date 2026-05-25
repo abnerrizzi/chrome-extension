@@ -107,10 +107,14 @@ def q(sql: str) -> str:
 
 
 def upsert_conflict_clause(col: str) -> str:
-    """Cláusula de upsert compatível com índice único parcial em `col`."""
-    if IS_POSTGRES:
-        return f"ON CONFLICT ({col}) WHERE {col} IS NOT NULL DO UPDATE SET"
-    return f"ON CONFLICT({col}) DO UPDATE SET"
+    """Cláusula de upsert compatível com índice único parcial em `col`.
+
+    Tanto Postgres quanto SQLite exigem o `WHERE` no conflict target para
+    casar com o predicado do índice único parcial — caso contrário o driver
+    SQLite rejeita com `ON CONFLICT clause does not match any … UNIQUE
+    constraint`. A forma é idêntica nos dois backends; mantemos o helper
+    centralizado para evitar drift entre persistence e changelogs."""
+    return f"ON CONFLICT ({col}) WHERE {col} IS NOT NULL DO UPDATE SET"
 
 
 def insert_returning_id(cur, insert_sql_qmark: str, params: tuple) -> int:

@@ -39,13 +39,12 @@ def test_q_passes_through_or_rewrites():
         assert rewritten == sql
 
 
-def test_upsert_conflict_clause_includes_partial_predicate_only_on_postgres():
+def test_upsert_conflict_clause_includes_partial_predicate():
+    """Ambos os backends exigem o `WHERE external_id IS NOT NULL` para casar o
+    conflict target com o índice único parcial — SQLite rejeita sem ele."""
     clause = db.upsert_conflict_clause("external_id")
-    if db.IS_POSTGRES:
-        assert "WHERE external_id IS NOT NULL" in clause
-    else:
-        assert "WHERE" not in clause
     assert "external_id" in clause
+    assert "WHERE external_id IS NOT NULL" in clause
     assert clause.endswith("DO UPDATE SET")
 
 
