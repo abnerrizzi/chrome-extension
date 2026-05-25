@@ -90,7 +90,7 @@ Postgres-only: types are hardcoded (`BIGSERIAL`, `JSONB`, `TIMESTAMPTZ`) since t
 
 - Service worker is **ephemeral** — never assume in-memory state survives. Use `chrome.storage.session` for cross-event data, `chrome.storage.sync` for user prefs (API URL).
 - **No string-eval**: parsers must be static `.js` files referenced by path. `web_accessible_resources` in `manifest.json` declares each parser with a per-domain `matches` array.
-- `host_permissions` is **empty** by design. `optional_host_permissions` declares `http://*/*` and `https://*/*`, and the options page (`extension/options.{html,js,css}`) requests the specific origin via `chrome.permissions.request({origins: [...]})` when the user saves a custom API URL.
+- `host_permissions` lists the **parser domains** (olx, linkedin, auctions placeholder). These are mandatory because `chrome.scripting.executeScript` (used in the SPA re-inject path) requires actual host permission at call time — `optional_host_permissions` alone isn't enough even when granted. `optional_host_permissions` declares `http://*/*` and `https://*/*` and stays reserved for the **user-configurable API URL**: the options page (`extension/options.{html,js,css}`) requests the specific origin via `chrome.permissions.request({origins: [...]})` when the user saves a custom API URL.
 - `webNavigation` permission powers the SPA re-injection in `background.js` — without it, OLX pagination via pushState wouldn't trigger the parser.
 
 ## Commit workflow
