@@ -13,6 +13,7 @@
 - [x] ST-006 Módulo LinkedIn de Extrações Profissionais
 - [x] ST-007 Módulo OLX Classificados
 - [x] ST-007b Módulo Auctions (extensão lógica do EPIC-002)
+- [x] ST-007c Refinamento OLX (kind venda/aluguel, neighbourhood, observabilidade __NEXT_DATA__)
 
 ## EPIC-003 — Backend Modular com Validação Dinâmica
 - [x] ST-008 Interceptação Segura API Gateway (Ingest Endpoint + CORS chrome-extension://*)
