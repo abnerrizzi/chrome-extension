@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Everything except the Chrome extension itself runs in **Docker Compose**. There is intentionally no local Python/Postgres/SQLite/Liquibase install required.
 
-**Dual-backend.** The persistence layer supports Postgres **or** SQLite, chosen at API process start from the `DATABASE_URL` scheme (`postgresql://…` → psycopg3; `sqlite:///…` or a bare path → stdlib `sqlite3`). The dialect shim lives at `api/app/core/db.py`; `persistence.py` authors SQL with `?` placeholders and wraps every statement in `db.q(...)` which rewrites to `%s` on Postgres. Upserts go through `db.upsert_conflict_clause("external_id")` because Postgres requires the `WHERE external_id IS NOT NULL` predicate to match the partial unique index, while SQLite resolves it implicitly. `db.insert_returning_id` handles the `RETURNING id` ↔ `lastrowid` split.
+**Dual-backend.** The persistence layer supports Postgres **or** SQLite, chosen at API process start from the `DATABASE_URL` scheme (`postgresql://…` → psycopg3; `sqlite:///…` or a bare path → stdlib `sqlite3`). The dialect shim lives at `api/app/core/db.py`; `persistence.py` authors SQL with `?` placeholders and wraps every statement in `db.q(...)` which rewrites to `%s` on Postgres. Upserts go through `db.upsert_conflict_clause("external_id")` — both backends require the `WHERE external_id IS NOT NULL` predicate in the conflict target to match the partial unique index (SQLite rejects the upsert with "ON CONFLICT clause does not match …" otherwise). `db.insert_returning_id` handles the `RETURNING id` ↔ `lastrowid` split.
 
 Both backends use Liquibase, with parallel changelog trees that must stay in lockstep:
 
@@ -109,7 +109,7 @@ Migrations are **Liquibase Formatted SQL**, kept in **two parallel trees** — `
 - `--preconditions onFail:HALT onError:HALT` + a `--precondition-sql-check`. The query differs per tree: Postgres uses `information_schema.{tables|columns}`; SQLite uses `sqlite_master` for tables and `pragma_table_info('<table>')` for columns.
 - `--rollback` lines that fully undo the changeset.
 
-For `external_id` dedup, the pattern is a **partial unique index** in both dialects: `CREATE UNIQUE INDEX uq_<table>_external_id ON <table>(external_id) WHERE external_id IS NOT NULL;` (SQLite supports the partial WHERE since 3.8). The persistence layer leverages this; Postgres needs `ON CONFLICT (external_id) WHERE external_id IS NOT NULL DO UPDATE`, SQLite needs `ON CONFLICT(external_id) DO UPDATE`. `db.upsert_conflict_clause` picks the right form.
+For `external_id` dedup, the pattern is a **partial unique index** in both dialects: `CREATE UNIQUE INDEX uq_<table>_external_id ON <table>(external_id) WHERE external_id IS NOT NULL;` (SQLite supports the partial WHERE since 3.8). The persistence layer leverages this with `ON CONFLICT (external_id) WHERE external_id IS NOT NULL DO UPDATE` — the same form on both backends, because each requires the conflict target to repeat the index predicate. `db.upsert_conflict_clause` keeps the wording in one place.
 
 Type mapping conventions (Postgres tree → SQLite tree): `BIGSERIAL PRIMARY KEY` → `INTEGER PRIMARY KEY AUTOINCREMENT`; `BIGINT` → `INTEGER`; `VARCHAR(n)` → `TEXT`; `JSONB` → `TEXT`; `TIMESTAMPTZ` → `TEXT` (ISO-8601 via `CURRENT_TIMESTAMP`); `NUMERIC(p,s)` → `NUMERIC`; `DEFAULT NOW()` → `DEFAULT CURRENT_TIMESTAMP`. SQLite only allows one `ADD COLUMN` per `ALTER TABLE`, so multi-column ALTERs are split into one statement per column.
 
