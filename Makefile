@@ -55,4 +55,17 @@ clean:  ## limpa artefatos intermediários
 	@rm -rf $(HTML) $(RAW) $(PAYLOAD)
 	@echo "✓ tmp/olx_*.{html,json} removidos"
 
-.PHONY: help fetch raw extract ingest run sessions clean
+up-postgres:  ## sobe stack Postgres (db + liquibase update + api)
+	@docker compose --profile postgres up -d db
+	@docker compose --profile postgres run --rm liquibase update
+	@docker compose up -d api
+
+up-sqlite:  ## sobe stack SQLite (liquibase-sqlite update + api)
+	@mkdir -p data
+	@docker compose --profile sqlite run --rm liquibase-sqlite update
+	@DATABASE_URL=$${DATABASE_URL:-sqlite:////data/scraper.db} docker compose up -d api
+
+down:  ## para todos os serviços de todos os perfis
+	@docker compose --profile postgres --profile sqlite down
+
+.PHONY: help fetch raw extract ingest run sessions clean up-postgres up-sqlite down
