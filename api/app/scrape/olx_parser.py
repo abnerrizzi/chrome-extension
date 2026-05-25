@@ -45,7 +45,7 @@ def _to_item(ad: Any) -> Optional[dict]:
         "price_raw": ad.get("priceValue"),
         "listing_kind": ad.get("categoryName") or ad.get("category"),
         "location": _format_location(ad),
-        "date_raw": ad.get("origListTime") or ad.get("date"),
+        "date_raw": _stringify_date(ad.get("origListTime") or ad.get("date")),
         "image_url": _pick_image(ad),
         "iptu_raw": _find_prop(props, "iptu"),
         "bedrooms_raw": _find_prop(props, "rooms"),
@@ -78,6 +78,12 @@ def _pick_image(ad: dict) -> Optional[str]:
             or first.get("thumbnail")
         )
     return None
+
+
+def _stringify_date(v: Any) -> Optional[str]:
+    if v in (None, "", 0):
+        return None
+    return str(v)
 
 
 def _find_prop(props: Any, name: str) -> Optional[str]:
