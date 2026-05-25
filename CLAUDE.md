@@ -35,13 +35,13 @@ There's also a **Make pipeline** that mirrors the extension end-to-end without C
 1. Calls `chrome.action.setBadgeText({text, tabId: sender.tab.id})` — **always tabId-scoped** to avoid badge pollution. Empty string when count is 0.
 2. Stashes the payload in `chrome.storage.session` keyed by `tab:<tabId>` so the popup can read it.
 
-The popup (`popup.js`) reads `chrome.storage.session` for the active tab, renders a preview of up to 8 items in a terminal-style UI, and POSTs `{domain_id, raw_data: {items}}` to `${apiUrl}/api/v1/ingest` (apiUrl from `chrome.storage.sync`, default `http://localhost:8000`).
+The popup (`popup.js`) reads `chrome.storage.session` for the active tab, renders a preview of up to 8 items in a terminal-style UI, and POSTs `{domain_id, raw_data: {items}}` to `${apiUrl}/api/v1/ingest` (apiUrl from `chrome.storage.sync`, default `http://localhost:8000`). A toggle switch in the popup (`#autosend-toggle`, persisted as `autoSend` in `chrome.storage.sync`) makes `background.js` POST automatically on every new `DOM_COUNT`, with per-tab dedupe by hash of `domain|external_ids` stored in `chrome.storage.session` under `tab:<id>:lastSentHash` — re-injections and `MutationObserver` re-fires on the same content do not double-POST.
 
 **Backend dynamic validation pipeline** (`api/app/routers/ingest.py`):
 1. `schema_registry.get_schema(domain_id)` loads JSON Schema from `api/app/schemas/<domain_id>.json` (LRU cached).
 2. `dynamic_validator.build_item_model(domain_id, schema)` walks `schema['properties']` and calls `pydantic.create_model(...)` to build a Pydantic class **at runtime**. The result is cached by SHA1 of the JSON repr so equivalent schemas reuse the same class.
 3. Each item is validated; failures collect into an `errors` list. Returns 422 if *all* fail, 200 with partial errors otherwise.
-4. Pure-function normalizers in `api/app/normalization/<domain>.py` transform validated dicts (e.g. OLX `"R$ 25.000,00"` → `price_cents: 2500000`; epoch seconds → ISO-8601; "5 ou mais" → `5`).
+4. Pure-function normalizers in `api/app/normalization/<domain>.py` transform validated dicts (e.g. OLX `"R$ 2.250.000"` → `price: 2250000.0` stored as `NUMERIC(12,2)`; epoch seconds → ISO-8601; `"3 quartos"` → `3`).
 5. `app/core/persistence.py` opens a sync `psycopg` connection per request, INSERTs a `scrape_sessions` row, then **UPSERTs** per-domain rows via `ON CONFLICT (external_id) WHERE external_id IS NOT NULL DO UPDATE SET …` — dedup is per-domain, partial unique index allows items without `external_id` to coexist. **Graceful degradation**: if `DATABASE_URL` is unreachable or migrations haven't run, the response still returns 200 with `persisted: false` and a `skipped_reason`.
 6. `GET /api/v1/sessions` + `GET /api/v1/sessions/{id}` expose the persisted data over HTTP.
 
@@ -54,7 +54,13 @@ The popup (`popup.js`) reads `chrome.storage.session` for the active tab, render
 
 ## OLX specifics
 
-The OLX parser **does not query the rendered DOM**. It reads `<script id="__NEXT_DATA__">` (Next.js hydration blob), uses **only** `props.pageProps.ads`, and filters `categoryName === "Casas"`. This is dramatically more stable than CSS selectors and gives access to richer fields (`origListTime` epoch, `properties[]` array with rooms/bathrooms/garage/size/iptu, structured `locationDetails`). Fixture for development: `tmp/next_data.js` (untracked) — a captured `__NEXT_DATA__` blob from a real page.
+The OLX parser **does not query the rendered DOM**. It reads `<script id="__NEXT_DATA__">` (Next.js hydration blob), uses **only** `props.pageProps.ads`, and derives the **module kind** (`venda` | `aluguel`) from the prefix of `properties[].real_estate_type` (e.g. `"Venda - casa em rua pública"` → `venda`). Anúncios sem prefixo Venda/Aluguel — temporada, troca etc. — são **descartados**; só casas de venda ou aluguel chegam ao backend. Fallback heurístico: regex `\b(aluguel|alugar|locacao)\b` / `\b(venda|vender|comprar)\b` no título/URL quando a property falta.
+
+A captura também expõe `origListTime` (epoch), `properties[]` (rooms / bathrooms / garage_spaces / size / iptu / category / real_estate_type) e `locationDetails` (`municipality` / `neighbourhood` / `uf`) — **separados** em colunas próprias do banco (`city`, `neighbourhood`, `state`) em vez de achatados em uma única string `location`.
+
+Um `MutationObserver` no próprio `<script id="__NEXT_DATA__">` re-roda o parser se o Next.js re-hidratar o blob no client. A re-injeção do content script via `chrome.webNavigation.onHistoryStateUpdated` em `background.js` cobre o caso comum (paginação SPA com `pushState`).
+
+Fixture para desenvolvimento: `tmp/olx_next_data.json` (untracked) — um `__NEXT_DATA__` capturado de uma página real.
 
 OLX is behind Cloudflare; plain `curl` returns a CAPTCHA page. Use the curl-impersonate Docker image (TLS fingerprint of Chrome 110) — the Makefile already wires this.
 
@@ -97,7 +103,7 @@ Postgres-only: types are hardcoded (`BIGSERIAL`, `JSONB`, `TIMESTAMPTZ`) since t
 
 Skill at `.claude/skills/commit/SKILL.md` produces single-line Conventional Commits (`<type>(<scope>): <subject>`, **hard cap 75 chars**, lowercase subject, no period). Scopes in use: `ext`, `api`, `db`, `olx`, `infra`, `skill`, `ci`. The skill also updates `epic/todo.md` checkboxes when a changed file maps to a tracked story. A `PostToolUse` hook in `.claude/settings.json` reminds to run `/commit` whenever the working tree has uncommitted changes after Edit/Write/MultiEdit.
 
-`epic/todo.md` is the canonical task tracker (Epics ↔ Stories mirror the original spec in `agents/claude-code-prompt.md`).
+`epic/todo.md` is the canonical task tracker (Epics ↔ Stories mirror the original spec in `agents/claude-code-prompt.md`). User-facing version history lives in `CHANGELOG.md` (Keep a Changelog format, versions track `extension/manifest.json#version`).
 
 ## CI
 
