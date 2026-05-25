@@ -56,3 +56,20 @@ ALTER TABLE olx_listings ADD COLUMN external_id VARCHAR(64);
 CREATE UNIQUE INDEX uq_olx_listings_external_id ON olx_listings(external_id) WHERE external_id IS NOT NULL;
 --rollback DROP INDEX IF EXISTS uq_olx_listings_external_id;
 --rollback ALTER TABLE olx_listings DROP COLUMN IF EXISTS external_id;
+
+
+--changeset claude:olx-004-modules
+--preconditions onFail:HALT onError:HALT
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='olx_listings' AND column_name='neighbourhood'
+ALTER TABLE olx_listings
+    ADD COLUMN neighbourhood    VARCHAR(128),
+    ADD COLUMN kind             VARCHAR(16),
+    ADD COLUMN real_estate_type VARCHAR(128);
+CREATE INDEX ix_olx_listings_kind ON olx_listings(kind);
+CREATE INDEX ix_olx_listings_neighbourhood ON olx_listings(neighbourhood);
+--rollback DROP INDEX IF EXISTS ix_olx_listings_neighbourhood;
+--rollback DROP INDEX IF EXISTS ix_olx_listings_kind;
+--rollback ALTER TABLE olx_listings
+--rollback     DROP COLUMN IF EXISTS real_estate_type,
+--rollback     DROP COLUMN IF EXISTS kind,
+--rollback     DROP COLUMN IF EXISTS neighbourhood;
