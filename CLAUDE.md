@@ -78,7 +78,7 @@ make sessions → GET /api/v1/sessions  (last 10)
 make session-<N> → GET /api/v1/sessions/<N>  (detail with items)
 ```
 
-`scripts/extract_olx.py` **mirrors `extension/parsers/olx_parser.js` line-by-line**: same path (`props.pageProps.ads`), same field mapping, same `isHouse` filter. Keep them in sync when changing parser logic. `scripts/dump_next_data.py` is the smaller utility that just yanks the JSON out of the HTML.
+`scripts/extract_olx.py` **mirrors `extension/parsers/olx_parser.js` line-by-line**: same path (`props.pageProps.ads`), same field mapping, same `kindFromRealEstateType` derivation, same `isVendaOuAluguel` filter (venda + aluguel only). Keep them in sync when changing parser logic. `scripts/dump_next_data.py` is the smaller utility that just yanks the JSON out of the HTML.
 
 `URL=…` env var overrides the default search; `API=…` overrides `http://localhost:8000`.
 
@@ -102,6 +102,8 @@ Postgres-only: types are hardcoded (`BIGSERIAL`, `JSONB`, `TIMESTAMPTZ`) since t
 ## Commit workflow
 
 Skill at `.claude/skills/commit/SKILL.md` produces single-line Conventional Commits (`<type>(<scope>): <subject>`, **hard cap 75 chars**, lowercase subject, no period). Scopes in use: `ext`, `api`, `db`, `olx`, `infra`, `skill`, `ci`. The skill also updates `epic/todo.md` checkboxes when a changed file maps to a tracked story. A `PostToolUse` hook in `.claude/settings.json` reminds to run `/commit` whenever the working tree has uncommitted changes after Edit/Write/MultiEdit.
+
+**Granularidade**: 1 commit por alteração lógica. Quando executar um plano multi-step, rodar `/commit` **após cada etapa** (cada arquivo ou grupo coeso), não acumular tudo em um commit final. Mudanças inseparáveis (schema + normalizer + persistence onde o teste só passa com os 3) podem ir juntas, mas o mais cedo possível. Ver a seção "Granularidade" no `SKILL.md`.
 
 `epic/todo.md` is the canonical task tracker (Epics ↔ Stories mirror the original spec in `agents/claude-code-prompt.md`). User-facing version history lives in `CHANGELOG.md` (Keep a Changelog format, versions track `extension/manifest.json#version`).
 
