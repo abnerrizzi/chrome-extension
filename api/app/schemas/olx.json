@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OlxListingItem",
+  "type": "object",
+  "required": ["title", "url"],
+  "properties": {
+    "title":     { "type": "string", "description": "Título do anúncio" },
+    "price_raw": { "type": "string", "description": "Preço como string localizada (R$ 1.234,56)" },
+    "location":  { "type": "string", "description": "Cidade/UF" },
+    "url":       { "type": "string", "description": "URL canônica do anúncio" }
+  }
+}

@@ -1,0 +1,9 @@
+[project]
+name = "modular-ingest-api"
+version = "0.1.0"
+description = "FastAPI ingest endpoint with dynamic Pydantic validation per domain."
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

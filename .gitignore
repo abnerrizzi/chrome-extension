@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# Node (caso futuramente seja adicionado)
+node_modules/
+
+# Env / secrets
+.env
+.env.local
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+
+# Build artifacts
+dist/
+build/
+
+# Liquibase
+liquibase.log

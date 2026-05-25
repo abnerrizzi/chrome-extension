@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LinkedInJobItem",
+  "type": "object",
+  "required": ["job_title"],
+  "properties": {
+    "job_title": { "type": "string", "description": "Cargo da vaga" },
+    "company":   { "type": "string", "description": "Empresa contratante" },
+    "location":  { "type": "string", "description": "Localização" },
+    "url":       { "type": "string", "description": "URL da vaga" }
+  }
+}

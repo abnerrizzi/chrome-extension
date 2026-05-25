@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "Modular DOM Counter",
+  "version": "0.1.0",
+  "description": "Conta itens relevantes em páginas suportadas (estilo AdBlock) e envia o payload normalizado para a API local.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "http://localhost:8000/*"
+  ],
+  "optional_host_permissions": [
+    "*://*.linkedin.com/*",
+    "*://*.olx.com.br/*",
+    "*://*.auctions.example/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Modular DOM Counter",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["parsers/linkedin_parser.js"],
+      "matches": ["*://*.linkedin.com/*"]
+    },
+    {
+      "resources": ["parsers/olx_parser.js"],
+      "matches": ["*://*.olx.com.br/*"]
+    },
+    {
+      "resources": ["parsers/auctions_parser.js"],
+      "matches": ["*://*.auctions.example/*"]
+    }
+  ]
+}

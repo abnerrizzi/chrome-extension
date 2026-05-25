@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AuctionItem",
+  "type": "object",
+  "required": ["lot_code", "title"],
+  "properties": {
+    "lot_code":        { "type": "string", "description": "Identificador do lote" },
+    "title":           { "type": "string", "description": "Título do lote" },
+    "current_bid_raw": { "type": "string", "description": "Lance atual como string localizada" },
+    "auction_end_raw": { "type": "string", "description": "Encerramento (formato variado)" },
+    "url":             { "type": "string", "description": "URL do lote" }
+  }
+}
