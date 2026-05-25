@@ -19,7 +19,7 @@ Compose services, gated by profiles:
 
 - `db` (profile `postgres`) — `postgres:16-alpine`, exposes 5432, healthchecked. Data at `./data/pgdata` (gitignored).
 - `liquibase` (profile `postgres`) — official `liquibase/liquibase:4.27`, runs `db/changelog/master.xml`.
-- `liquibase-sqlite` (profile `sqlite`) — runs `db/changelog-sqlite/master.xml` against `/data/scraper.db` (host bind: `./data/scraper.db`, gitignored).
+- `liquibase-sqlite` (profile `sqlite`) — built from `db/Dockerfile.liquibase-sqlite`, runs `db/changelog-sqlite/master.xml` against `/data/scraper.db` (host bind: `./data:/data`, gitignored). The Dockerfile pins **sqlite-jdbc 3.41.2.2** — the last release before xerial made `slf4j-api` a hard runtime dep that the official Liquibase image doesn't ship; newer jars crash on init with `NoClassDefFoundError: org/slf4j/LoggerFactory`. The container runs as `root` so it can write the bind-mounted DB file regardless of who created `./data/`.
 - `api` (no profile — always available) — FastAPI + Pydantic v2 + psycopg3 + uvicorn. Mounts `./api` for hot-reload and `./data` so SQLite persists outside the container.
 
 The Chrome extension is loaded manually in `chrome://extensions → Load unpacked → ./extension`. It talks to `http://localhost:8000` by default, but the URL is **configurable per-user** via the options page (see "MV3 specifics").
@@ -45,7 +45,13 @@ sqlite3 data/scraper.db                         # shell SQLite
 docker compose up -d api                        # start API at :8000
 docker compose run --rm api pytest              # run all tests
 docker compose run --rm api pytest tests/test_ingest_dynamic.py::test_olx_house_payload_full_normalization
-make down                                       # tudo (mantém binds ./data e ./data/pgdata)
+make down                                       # para tudo de ambos os perfis (mantém binds ./data e ./data/pgdata)
+
+# Rodar pytest contra um backend específico (sobrescreve DATABASE_URL):
+docker compose run --rm -e DATABASE_URL=sqlite:////data/scraper.db -v "$(pwd)/data:/data" api pytest
+docker compose run --rm -e DATABASE_URL=postgresql://app:app@db:5432/scraper_dev api pytest
+# O test_external_id_upsert_dedupes_olx só exercita o roundtrip real quando as migrações estão aplicadas
+# no backend ativo; sem schema, ele degrada para um no-op (persisted=false).
 ```
 
 There's also a **Make pipeline** that mirrors the extension end-to-end without Chrome — see "Make pipeline" below. API docs at `http://localhost:8000/docs`.
@@ -63,7 +69,7 @@ The popup (`popup.js`) reads `chrome.storage.session` for the active tab, render
 2. `dynamic_validator.build_item_model(domain_id, schema)` walks `schema['properties']` and calls `pydantic.create_model(...)` to build a Pydantic class **at runtime**. The result is cached by SHA1 of the JSON repr so equivalent schemas reuse the same class.
 3. Each item is validated; failures collect into an `errors` list. Returns 422 if *all* fail, 200 with partial errors otherwise.
 4. Pure-function normalizers in `api/app/normalization/<domain>.py` transform validated dicts (e.g. OLX `"R$ 2.250.000"` → `price: 2250000.0` stored as `NUMERIC(12,2)`; epoch seconds → ISO-8601; `"3 quartos"` → `3`).
-5. `app/core/persistence.py` opens a sync connection per request through `app.core.db.connect()` (psycopg3 on Postgres, stdlib `sqlite3` on SQLite). It INSERTs a `scrape_sessions` row, then **UPSERTs** per-domain rows — Postgres SQL uses `ON CONFLICT (external_id) WHERE external_id IS NOT NULL DO UPDATE SET …`, SQLite uses `ON CONFLICT(external_id) DO UPDATE SET …`; the dialect shim picks the right form. Dedup is per-domain, partial unique index allows items without `external_id` to coexist. **Graceful degradation**: if `DATABASE_URL` is unreachable or migrations haven't run, the response still returns 200 with `persisted: false` and a `skipped_reason`.
+5. `app/core/persistence.py` opens a sync connection per request through `app.core.db.connect()` (psycopg3 on Postgres, stdlib `sqlite3` on SQLite). It INSERTs a `scrape_sessions` row, then **UPSERTs** per-domain rows via `ON CONFLICT (external_id) WHERE external_id IS NOT NULL DO UPDATE SET …` — same form on both backends (each requires the `WHERE` predicate to match the partial unique index). Dedup is per-domain; the partial index lets items without `external_id` coexist. **Graceful degradation**: if `DATABASE_URL` is unreachable or migrations haven't run, the response still returns 200 with `persisted: false` and a `skipped_reason`.
 6. `GET /api/v1/sessions` + `GET /api/v1/sessions/{id}` expose the persisted data over HTTP.
 
 **Adding a new domain** requires five files in lockstep:
