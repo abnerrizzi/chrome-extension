@@ -9,6 +9,12 @@ description: Cria um git commit no padrão Conventional Commits, uma única linh
 - Disparada pelo hook `PostToolUse` após `Edit`, `Write` ou `MultiEdit`.
 - Pode também ser invocada manualmente pelo usuário com `/commit`.
 
+## Granularidade (importante)
+- **1 commit por alteração lógica.** Não acumular múltiplos arquivos não-relacionados em um único commit "final".
+- Quando o assistente estiver executando um plano com várias etapas, rodar `/commit` **após cada etapa** (cada arquivo ou cada grupo coeso), não só no final.
+- Se um único Edit toca 1 arquivo com escopo claro → commit imediato.
+- Se o Edit é parte de um conjunto inseparável (ex.: schema + normalizer + persistence precisam ir juntos para um teste passar) → commit ao fechar o grupo, ainda assim o mais cedo possível.
+
 ## Procedimento
 
 1. **Verificar mudanças pendentes**
