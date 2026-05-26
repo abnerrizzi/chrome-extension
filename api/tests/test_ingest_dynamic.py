@@ -293,6 +293,77 @@ def test_linkedin_detail_enriches_via_external_id_upsert():
             cur.execute(db.q("DELETE FROM linkedin_jobs WHERE external_id=?"), (eid,))
 
 
+def test_linkedin_fake_fixture_round_trip():
+    """Carrega as fixtures de busca + detalhe (api/tests/fixtures/linkedin_*.json)
+    — as mesmas que o Makefile usa em `make linkedin-fake-run` — POSTa as duas
+    sequências e confere o merge por external_id no banco.
+
+    Fixtures externalizadas para que o pipeline manual (curl via Makefile) e o
+    teste automatizado consumam exatamente o mesmo payload — qualquer drift
+    quebra os dois ao mesmo tempo.
+    """
+    import json
+    from pathlib import Path
+
+    from app.core import db
+
+    fixtures = Path(__file__).parent / "fixtures"
+    search = json.loads((fixtures / "linkedin_search_list.json").read_text())
+    detail = json.loads((fixtures / "linkedin_detail.json").read_text())
+
+    r1 = client.post("/api/v1/ingest", json=search)
+    r2 = client.post("/api/v1/ingest", json=detail)
+    assert r1.status_code == 200 and r2.status_code == 200, (r1.text, r2.text)
+    assert r1.json()["validated"] == 4
+    assert r2.json()["validated"] == 2
+
+    if not r1.json().get("persisted"):
+        return  # DB sem migrações — pula assertions
+
+    eids = [it["external_id"] for it in search["raw_data"]["items"]]
+    enriched_ids = {it["external_id"] for it in detail["raw_data"]["items"]}
+    try:
+        with db.connect() as conn:
+            with db.cursor(conn) as cur:
+                # Uma linha por external_id (upsert preservou unicidade).
+                placeholders = ",".join(["?"] * len(eids))
+                cur.execute(
+                    db.q(
+                        f"SELECT count(*) FROM linkedin_jobs WHERE external_id IN ({placeholders})"
+                    ),
+                    tuple(eids),
+                )
+                assert cur.fetchone()[0] == 4
+
+                # Cards enriquecidos têm description; os outros têm description NULL.
+                for eid in eids:
+                    cur.execute(
+                        db.q(
+                            "SELECT job_title, company, description, seniority, workplace_type "
+                            "FROM linkedin_jobs WHERE external_id=?"
+                        ),
+                        (eid,),
+                    )
+                    title, company, desc, sen, wp = cur.fetchone()
+                    assert title  # job_title sempre persistido
+                    assert company  # vindo da lista
+                    if eid in enriched_ids:
+                        assert desc, f"detalhe esperado para {eid}"
+                        assert sen and wp
+                    else:
+                        assert desc is None
+                        assert sen is None
+                        assert wp is None
+    finally:
+        with db.connect() as conn:
+            with db.cursor(conn) as cur:
+                placeholders = ",".join(["?"] * len(eids))
+                cur.execute(
+                    db.q(f"DELETE FROM linkedin_jobs WHERE external_id IN ({placeholders})"),
+                    tuple(eids),
+                )
+
+
 def test_olx_house_payload_full_normalization():
     payload = {
         "domain_id": "olx",
