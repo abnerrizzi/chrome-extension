@@ -13,12 +13,12 @@ import re
 from datetime import datetime, timedelta, timezone
 
 _REL_RE = re.compile(
-    r"(?ix)                            # case-insensitive, verbose
-    (?:reposted|posted)?\s*            # opcional 'Reposted ' / 'Posted '
-    (\d+)\s+                           # quantidade
-    (minute|hour|day|week|month|year)s?  # unidade
-    \s+ago                             # sufixo
-    "
+    r"""(?ix)                              # case-insensitive, verbose
+        (?:reposted|posted)?\s*            # opcional 'Reposted ' / 'Posted '
+        (\d+)\s+                           # quantidade
+        (minute|hour|day|week|month|year)s?  # unidade
+        \s+ago                             # sufixo
+    """
 )
 _UNIT_SECONDS = {
     "minute": 60,
