@@ -38,7 +38,15 @@
     const seen = new Set();
     const items = [];
     for (const el of cards) {
-      const item = toItem(el);
+      let item;
+      try {
+        item = toItem(el);
+      } catch (err) {
+        // Um único card malformado (href inválido, atributo ausente, etc.)
+        // não deve abortar a emissão inteira — pula e segue.
+        console.debug("[linkedin_search_parser] card ignorado:", err.message);
+        continue;
+      }
       if (!item || !item.external_id || seen.has(item.external_id)) continue;
       seen.add(item.external_id);
       items.push(item);
@@ -119,9 +127,21 @@
   function linkOf(root) {
     // Prefere o anchor que aponta para /jobs/view/<id> (link canônico do card).
     const direct = root.querySelector('a[href*="/jobs/view/"]');
-    if (direct) return new URL(direct.getAttribute("href"), location.origin).href;
-    const fallback = root.querySelector("a[href]");
-    return fallback ? new URL(fallback.getAttribute("href"), location.origin).href : null;
+    const href = (direct || root.querySelector("a[href]"))?.getAttribute("href");
+    return safeAbsoluteUrl(href);
+  }
+
+  // `new URL()` lança em hrefs vazios, `#`, `javascript:void(0)` etc. — comuns
+  // em cards promocionais / footer da página de coleções. Devolve null no lugar.
+  function safeAbsoluteUrl(href) {
+    if (!href) return null;
+    const trimmed = href.trim();
+    if (!trimmed || trimmed === "#" || trimmed.startsWith("javascript:")) return null;
+    try {
+      return new URL(trimmed, location.origin).href;
+    } catch (_) {
+      return null;
+    }
   }
 
   function send(items, totalAvailable) {
