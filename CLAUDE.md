@@ -45,6 +45,7 @@ sqlite3 data/scraper.db                         # shell SQLite
 docker compose up -d api                        # start API at :8000
 docker compose run --rm api pytest              # run all tests
 docker compose run --rm api pytest tests/test_ingest_dynamic.py::test_olx_house_payload_full_normalization
+make linkedin-fake-run                          # POSTa fixtures linkedin (search + detail) — smoke-test do ingest
 make down                                       # para tudo de ambos os perfis (mantém binds ./data e ./data/pgdata)
 
 # Rodar pytest contra um backend específico (sobrescreve DATABASE_URL):
@@ -90,6 +91,28 @@ Um `MutationObserver` no próprio `<script id="__NEXT_DATA__">` re-roda o parser
 Fixture para desenvolvimento: `tmp/olx_next_data.json` (untracked) — um `__NEXT_DATA__` capturado de uma página real.
 
 OLX is behind Cloudflare; plain `curl` returns a CAPTCHA page. Use the curl-impersonate Docker image (TLS fingerprint of Chrome 110) — the Makefile already wires this.
+
+## LinkedIn specifics
+
+Unlike OLX, LinkedIn does **not** expose a `__NEXT_DATA__` hydration blob — its jobs UI is an Ember SPA backed by the (auth-only) Voyager API. The extension parses the rendered DOM in the user's logged-in browser. Two parsers live under one `domain_id: "linkedin"`:
+
+- `extension/parsers/linkedin_search_parser.js` — matches `/jobs/search*`, `/jobs/collections/*`. Locates the results `<ul>` by scanning every `<ul>` inside `<main>` and picking the one with the most direct `<li id^="ember…">` children. Iterates only direct LI children to avoid Ember IDs leaking in from nav/recommendation lists. Extracts `external_id` in order: `data-occludable-job-id` → `data-job-id` → `/jobs/view/<id>/` from the canonical anchor. **Never** uses `id="ember<N>"` as identity — Ember regenerates these between renders. Captures `totalAvailable` from the count `<small>` in `#main header` and ships it on the `DOM_COUNT` message; `background.js` persists it on `tab:<id>` in `chrome.storage.session`.
+- `extension/parsers/linkedin_detail_parser.js` — matches `/jobs/view/*` and `/jobs/search/?currentJobId=*`. Emits one item with `description`, `seniority` (chip text mapped via keyword table), `workplace_type` (`Remote`/`Hybrid`/`On-site` via keyword table), `posted_at` (prefer `<time datetime>` over the relative-text fallback), and best-effort `skills[]` from the "How you match" card.
+
+Both parsers carry the same `domain_id`, so the backend pipeline stays single-track. The merge happens server-side: `persistence._insert_items` upserts on the `external_id` partial unique index and uses `COALESCE(EXCLUDED.col, linkedin_jobs.col)` in the `DO UPDATE SET` clause so re-running the search (which omits `description`/etc.) does not wipe enriched columns left by the detail ingest. The normalizer (`api/app/normalization/linkedin.py`) treats everything except `job_title` as optional; `_posted_at_to_iso` parses `Reposted N <unit> ago` (minute/hour/day/week/month/year, with optional `Posted`/`Reposted` prefix) relative to `datetime.now(timezone.utc)`; `_skills_to_json` serializes lists to a single JSON string for symmetric storage across Postgres `JSONB` and SQLite `TEXT`.
+
+LinkedIn DOM class names rotate frequently. Each parser concentrates volatile selectors in a single `SELECTORS` const at the top — adjust there when the layout shifts. **Don't** add anti-bot / impersonation logic; the parser runs in the user's authenticated browser, not as a crawler.
+
+**Fake-data pipeline.** Because `/jobs/search` requires login, the OLX-style `fetch → extract → ingest` chain doesn't apply. Two versioned fixtures simulate the extension's POST shape:
+
+```
+api/tests/fixtures/linkedin_search_list.json  → 4 search cards
+api/tests/fixtures/linkedin_detail.json       → 2 detail enrichments (subset of the cards)
+```
+
+Both are consumed by:
+- `make linkedin-fake-run` (chains `linkedin-fake-search` then `linkedin-fake-detail`) — POSTs them via curl so you can smoke-test the ingest pipeline against either backend without touching LinkedIn.
+- `tests/test_ingest_dynamic.py::test_linkedin_fake_fixture_round_trip` — loads the same files and asserts the merged rows. Editing the fixtures changes both the manual flow and the test in lockstep.
 
 ## Make pipeline (mirrors the extension)
 
