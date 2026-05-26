@@ -95,6 +95,100 @@ def test_external_id_upsert_dedupes_olx():
             cur.execute(db.q("DELETE FROM olx_listings WHERE external_id=?"), (eid,))
 
 
+def test_linkedin_search_list_payload_shape():
+    """Payload representativo da lista de busca: 3 cards com a forma exata que
+    `linkedin_search_parser.js` emite. Confere validação, contagem e
+    normalização passthrough (campos da lista não exigem transformação)."""
+    payload = {
+        "domain_id": "linkedin",
+        "raw_data": {
+            "items": [
+                {
+                    "external_id": "3812345678",
+                    "job_title": "Staff Software Engineer, Platform",
+                    "company": "Acme Robotics",
+                    "location": "São Paulo, São Paulo, Brazil · Remote",
+                    "url": "https://www.linkedin.com/jobs/view/3812345678/",
+                },
+                {
+                    "external_id": "3812345679",
+                    "job_title": "Senior Backend Engineer (Python/Go)",
+                    "company": "Globex",
+                    "location": "Rio de Janeiro, RJ · Hybrid",
+                    "url": "https://www.linkedin.com/jobs/view/3812345679/",
+                },
+                {
+                    "external_id": "3812345680",
+                    "job_title": "Data Engineer",
+                    "company": "Initech",
+                    "location": "Remote",
+                    "url": "https://www.linkedin.com/jobs/view/3812345680/",
+                },
+            ]
+        },
+    }
+    r = client.post("/api/v1/ingest", json=payload)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["validated"] == 3
+    titles = [it["job_title"] for it in body["normalized"]]
+    assert titles == [
+        "Staff Software Engineer, Platform",
+        "Senior Backend Engineer (Python/Go)",
+        "Data Engineer",
+    ]
+    # Campos do detalhe ficam None na lista — confirma que o normalizer não
+    # inventa valores.
+    for it in body["normalized"]:
+        assert it["description"] is None
+        assert it["seniority"] is None
+        assert it["workplace_type"] is None
+        assert it["skills"] is None
+
+
+def test_linkedin_detail_payload_full_normalization():
+    """Payload representativo da página de detalhe: chips de seniority/workplace,
+    posted_at como `<time datetime>` ISO, skills lista, description multilinha.
+    Confere a normalização ponto-a-ponto."""
+    iso_posted = "2026-05-20T13:42:00Z"
+    payload = {
+        "domain_id": "linkedin",
+        "raw_data": {
+            "items": [{
+                "external_id": "3812345678",
+                "job_title": "Staff Software Engineer, Platform",
+                "company": "Acme Robotics",
+                "location": "São Paulo, São Paulo, Brazil",
+                "url": "https://www.linkedin.com/jobs/view/3812345678/",
+                "description": (
+                    "About the role:\n"
+                    "We are looking for a staff engineer to drive the platform "
+                    "team's roadmap. You will design distributed systems, mentor "
+                    "engineers, and partner with product."
+                ),
+                "seniority": "Mid-Senior level",
+                "workplace_type": "Remote",
+                "posted_at": iso_posted,
+                "skills": ["Python", "Kafka", "PostgreSQL", "Distributed Systems"],
+            }],
+        },
+    }
+    r = client.post("/api/v1/ingest", json=payload)
+    assert r.status_code == 200, r.text
+    out = r.json()["normalized"][0]
+    assert out["external_id"] == "3812345678"
+    assert out["seniority"] == "Mid-Senior level"
+    assert out["workplace_type"] == "Remote"
+    # ISO já formatado passa direto pelo normalizer.
+    assert out["posted_at"] == iso_posted
+    # Skills sai como JSON string para encaixar no JSONB/TEXT cross-backend.
+    import json as _json
+    assert _json.loads(out["skills"]) == [
+        "Python", "Kafka", "PostgreSQL", "Distributed Systems",
+    ]
+    assert out["description"].startswith("About the role:")
+
+
 def test_linkedin_posted_at_relative_parses():
     """'Reposted 3 days ago' vira ISO-8601 ~3 dias antes de agora."""
     from datetime import datetime, timezone
