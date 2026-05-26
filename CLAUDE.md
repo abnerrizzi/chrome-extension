@@ -149,6 +149,10 @@ Type mapping conventions (Postgres tree → SQLite tree): `BIGSERIAL PRIMARY KEY
 - `host_permissions` lists the **parser domains** (olx, linkedin, auctions placeholder). These are mandatory because `chrome.scripting.executeScript` (used in the SPA re-inject path) requires actual host permission at call time — `optional_host_permissions` alone isn't enough even when granted. `optional_host_permissions` declares `http://*/*` and `https://*/*` and stays reserved for the **user-configurable API URL**: the options page (`extension/options.{html,js,css}`) requests the specific origin via `chrome.permissions.request({origins: [...]})` when the user saves a custom API URL.
 - `webNavigation` permission powers the SPA re-injection in `background.js` — without it, OLX pagination via pushState wouldn't trigger the parser.
 
+## Branch workflow
+
+Skill at `.claude/skills/feature-branch/SKILL.md` (invoke with `/feature-branch [slug]`) checks out a fresh branch from an updated `master`/`main` before any new feature, refactor, or non-trivial fix. Branch names mirror the Conventional Commits vocabulary: `<type>/<scope>-<subject-kebab>` (e.g. `feat/ext-linkedin-detail`, `fix/api-upsert-coalesce`). Pre-flight checks: working tree clean, base branch up to date (`--ff-only`), no force operations. The skill **only** positions the branch — it does not commit. When in doubt about scope or subject, the skill asks before creating.
+
 ## Commit workflow
 
 Skill at `.claude/skills/commit/SKILL.md` produces single-line Conventional Commits (`<type>(<scope>): <subject>`, **hard cap 75 chars**, lowercase subject, no period). Scopes in use: `ext`, `api`, `db`, `olx`, `infra`, `skill`, `ci`. The skill also updates `epic/todo.md` checkboxes when a changed file maps to a tracked story. A `PostToolUse` hook in `.claude/settings.json` reminds to run `/commit` whenever the working tree has uncommitted changes after Edit/Write/MultiEdit.
