@@ -261,17 +261,25 @@ def test_linkedin_detail_enriches_via_external_id_upsert():
     with db.connect() as conn:
         with db.cursor(conn) as cur:
             cur.execute(
+                db.q("SELECT count(*) FROM linkedin_jobs WHERE external_id=?"),
+                (eid,),
+            )
+            assert cur.fetchone()[0] == 1, "upsert deve manter uma única linha"
+            # Cast skills::text para evitar max(jsonb) no Postgres; SQLite
+            # ignora o cast (skills é TEXT). Aqui não agregamos, leitura direta.
+            cur.execute(
                 db.q(
-                    "SELECT count(*), max(description), max(seniority), "
-                    "       max(workplace_type), max(company), max(location), "
-                    "       max(skills) "
+                    "SELECT description, seniority, workplace_type, company, "
+                    "       location, skills::text AS skills_text "
+                    "FROM linkedin_jobs WHERE external_id=?"
+                ) if db.IS_POSTGRES else db.q(
+                    "SELECT description, seniority, workplace_type, company, "
+                    "       location, skills "
                     "FROM linkedin_jobs WHERE external_id=?"
                 ),
                 (eid,),
             )
-            row = cur.fetchone()
-            count, desc, sen, wp, comp, loc, skills = row
-            assert count == 1, "upsert deve manter uma única linha"
+            desc, sen, wp, comp, loc, skills = cur.fetchone()
             assert desc == "Build distributed systems at scale."
             assert sen == "Mid-Senior level"
             assert wp == "Remote"
