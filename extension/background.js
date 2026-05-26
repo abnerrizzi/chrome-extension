@@ -3,9 +3,28 @@
 
 const DOMAIN_REGISTRY = [
   {
-    id: "linkedin",
-    js: ["parsers/linkedin_parser.js"],
-    matches: ["*://*.linkedin.com/*"],
+    // Lista de busca: cards rasos com data-job-id.
+    id: "linkedin-search",
+    js: ["parsers/linkedin_search_parser.js"],
+    matches: [
+      "*://*.linkedin.com/jobs/search/*",
+      "*://*.linkedin.com/jobs/search*",
+      "*://*.linkedin.com/jobs/collections/*",
+      "*://*.linkedin.com/jobs/",
+    ],
+    allFrames: false,
+    runAt: "document_idle",
+  },
+  {
+    // Detalhe: enriquece a linha via upsert por external_id.
+    // /jobs/view/<id> e o painel direito em /jobs/search/?currentJobId=<id>.
+    id: "linkedin-detail",
+    js: ["parsers/linkedin_detail_parser.js"],
+    matches: [
+      "*://*.linkedin.com/jobs/view/*",
+      "*://*.linkedin.com/jobs/search/*",
+      "*://*.linkedin.com/jobs/search*",
+    ],
     allFrames: false,
     runAt: "document_idle",
   },

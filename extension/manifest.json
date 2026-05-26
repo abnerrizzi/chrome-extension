@@ -43,7 +43,11 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["parsers/linkedin_parser.js"],
+      "resources": ["parsers/linkedin_search_parser.js"],
+      "matches": ["*://*.linkedin.com/*"]
+    },
+    {
+      "resources": ["parsers/linkedin_detail_parser.js"],
       "matches": ["*://*.linkedin.com/*"]
     },
     {
