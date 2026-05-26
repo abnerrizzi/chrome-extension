@@ -10,6 +10,21 @@ Liquibase changeset id (e.g. `olx-004`).
 
 ## [Unreleased]
 
+## [0.3.4] — 2026-05-26
+
+### Fixed
+- **Parsers LinkedIn (search + detail) sobrevivem a "Extension context
+  invalidated"**. Quando o usuário recarrega a extensão em `chrome://extensions`,
+  o content script antigo continua vivo na aba até um refresh. O `MutationObserver`
+  agora valida `chrome.runtime?.id` antes de cada `sendMessage`, e
+  `disconnectAndStop()` desliga o observer no primeiro sinal de runtime morto.
+  Também blindamos `linkOf()` contra `href` inválidos (`#`, `javascript:`, vazio)
+  e isolamos exceções por card para não abortar a emissão inteira.
+  *Após atualizar a extensão, recarregue as abas do LinkedIn já abertas — o
+  content script antigo só sai quando a página é reinjetada.*
+
+## [Unreleased] — pre-0.3.4
+
 ### Added
 - **Backend SQLite alternativo** ao Postgres, escolhido pelo scheme do
   `DATABASE_URL` (`postgresql://…` vs `sqlite:///…`). Shim de dialeto em
