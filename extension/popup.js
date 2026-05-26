@@ -22,6 +22,9 @@ const $endpointPath = document.getElementById("endpoint-path");
 
 const MAX_PREVIEW = 8;
 
+const $hdrVer = document.getElementById("hdr-ver");
+$hdrVer.textContent = `v${chrome.runtime.getManifest().version}`;
+
 async function currentTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   return tab;
