@@ -95,6 +95,102 @@ def test_external_id_upsert_dedupes_olx():
             cur.execute(db.q("DELETE FROM olx_listings WHERE external_id=?"), (eid,))
 
 
+def test_linkedin_posted_at_relative_parses():
+    """'Reposted 3 days ago' vira ISO-8601 ~3 dias antes de agora."""
+    from datetime import datetime, timezone
+
+    from app.normalization.linkedin import normalize
+
+    out = normalize([{"job_title": "Eng", "posted_at": "Reposted 3 days ago"}])[0]
+    iso = out["posted_at"]
+    assert iso and "T" in iso
+    parsed = datetime.fromisoformat(iso)
+    delta_days = (datetime.now(timezone.utc) - parsed).total_seconds() / 86_400
+    assert 2.9 < delta_days < 3.1
+
+
+def test_linkedin_skills_list_serialised():
+    """Lista de skills é serializada como JSON string (cross-backend)."""
+    import json
+
+    from app.normalization.linkedin import normalize
+
+    out = normalize([{"job_title": "Eng", "skills": ["Python", "SQL", "  "]}])[0]
+    assert isinstance(out["skills"], str)
+    assert json.loads(out["skills"]) == ["Python", "SQL"]
+
+    empty = normalize([{"job_title": "Eng", "skills": []}])[0]
+    assert empty["skills"] is None
+
+
+def test_linkedin_detail_enriches_via_external_id_upsert():
+    """Ingest 1 (busca) cria a linha; ingest 2 (detalhe, mesmo external_id)
+    preenche description/seniority/workplace_type; ingest 1 não deve apagar
+    campos do detalhe se rodar de novo depois (COALESCE preserva)."""
+    from app.core import db
+
+    eid = "test-li-enrich-1234567"
+    search_payload = {
+        "domain_id": "linkedin",
+        "raw_data": {
+            "items": [{
+                "external_id": eid,
+                "job_title": "Staff Engineer",
+                "company": "Acme",
+                "location": "Remote · Brazil",
+                "url": f"https://linkedin.com/jobs/view/{eid}/",
+            }],
+        },
+    }
+    detail_payload = {
+        "domain_id": "linkedin",
+        "raw_data": {
+            "items": [{
+                "external_id": eid,
+                "job_title": "Staff Engineer",
+                "description": "Build distributed systems at scale.",
+                "seniority": "Mid-Senior level",
+                "workplace_type": "Remote",
+                "posted_at": "Reposted 2 days ago",
+                "skills": ["Python", "Kafka"],
+            }],
+        },
+    }
+    r1 = client.post("/api/v1/ingest", json=search_payload)
+    r2 = client.post("/api/v1/ingest", json=detail_payload)
+    r3 = client.post("/api/v1/ingest", json=search_payload)  # busca de novo
+    assert r1.status_code == 200 and r2.status_code == 200 and r3.status_code == 200
+
+    if not r1.json().get("persisted"):
+        return  # DB sem migrações — pula assertions
+
+    with db.connect() as conn:
+        with db.cursor(conn) as cur:
+            cur.execute(
+                db.q(
+                    "SELECT count(*), max(description), max(seniority), "
+                    "       max(workplace_type), max(company), max(location), "
+                    "       max(skills) "
+                    "FROM linkedin_jobs WHERE external_id=?"
+                ),
+                (eid,),
+            )
+            row = cur.fetchone()
+            count, desc, sen, wp, comp, loc, skills = row
+            assert count == 1, "upsert deve manter uma única linha"
+            assert desc == "Build distributed systems at scale."
+            assert sen == "Mid-Senior level"
+            assert wp == "Remote"
+            # Campos da lista também devem persistir (COALESCE preserva quando
+            # a ingestão de busca roda DEPOIS do detalhe).
+            assert comp == "Acme"
+            assert loc == "Remote · Brazil"
+            # Skills armazenado como JSON string.
+            import json as _json
+            assert _json.loads(skills) == ["Python", "Kafka"]
+            cur.execute(db.q("DELETE FROM linkedin_jobs WHERE external_id=?"), (eid,))
+
+
 def test_olx_house_payload_full_normalization():
     payload = {
         "domain_id": "olx",
