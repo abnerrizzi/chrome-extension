@@ -52,17 +52,33 @@ def _insert_items(cur, domain_id: str, session_id: int, items: list[dict]) -> No
     on_conflict = db.upsert_conflict_clause("external_id")
 
     if domain_id == "linkedin":
+        # Upsert pelo external_id: ingestão de busca cria a linha; ingestão de
+        # detalhe (mesmo external_id) preenche description/seniority/etc.
+        # COALESCE no SET preserva valores já gravados quando o detalhe omite
+        # um campo (ex.: list não tem description; não deve apagar a do detalhe).
         cur.executemany(
             db.q(
                 "INSERT INTO linkedin_jobs "
-                "(session_id, external_id, job_title, company, location, url) "
-                "VALUES (?,?,?,?,?,?) "
+                "(session_id, external_id, job_title, company, location, url, "
+                " description, seniority, workplace_type, posted_at, skills) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?) "
                 f"{on_conflict} "
-                "  session_id=EXCLUDED.session_id, job_title=EXCLUDED.job_title, "
-                "  company=EXCLUDED.company, location=EXCLUDED.location, url=EXCLUDED.url"
+                "  session_id=EXCLUDED.session_id, "
+                "  job_title=EXCLUDED.job_title, "
+                "  company=COALESCE(EXCLUDED.company, linkedin_jobs.company), "
+                "  location=COALESCE(EXCLUDED.location, linkedin_jobs.location), "
+                "  url=COALESCE(EXCLUDED.url, linkedin_jobs.url), "
+                "  description=COALESCE(EXCLUDED.description, linkedin_jobs.description), "
+                "  seniority=COALESCE(EXCLUDED.seniority, linkedin_jobs.seniority), "
+                "  workplace_type=COALESCE(EXCLUDED.workplace_type, linkedin_jobs.workplace_type), "
+                "  posted_at=COALESCE(EXCLUDED.posted_at, linkedin_jobs.posted_at), "
+                "  skills=COALESCE(EXCLUDED.skills, linkedin_jobs.skills)"
             ),
             [(session_id, it.get("external_id"), it.get("job_title"),
-              it.get("company"), it.get("location"), it.get("url")) for it in items],
+              it.get("company"), it.get("location"), it.get("url"),
+              it.get("description"), it.get("seniority"),
+              it.get("workplace_type"), it.get("posted_at"),
+              it.get("skills")) for it in items],
         )
     elif domain_id == "olx":
         cur.executemany(
