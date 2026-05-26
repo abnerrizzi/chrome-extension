@@ -147,14 +147,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // Persiste o último payload por aba para o popup recuperar.
   if (tabId) {
     const key = `tab:${tabId}`;
-    chrome.storage.session.set({
-      [key]: {
-        domain: msg.domain,
-        count: msg.count,
-        items: msg.items || [],
-        capturedAt: Date.now(),
-      },
-    });
+    const stored = {
+      domain: msg.domain,
+      count: msg.count,
+      items: msg.items || [],
+      capturedAt: Date.now(),
+    };
+    // Metadata opcional: total de resultados disponíveis na página
+    // (ex.: LinkedIn mostra "1.234 vagas"). Útil para popup exibir
+    // "mostrando N de TOTAL".
+    if (typeof msg.totalAvailable === "number") stored.totalAvailable = msg.totalAvailable;
+    chrome.storage.session.set({ [key]: stored });
     autoSendIfEnabled(tabId, msg.domain, msg.items || []).catch((err) =>
       console.error("autoSend", err),
     );
