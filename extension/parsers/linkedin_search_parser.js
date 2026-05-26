@@ -20,17 +20,31 @@
     totalCount:    '#main header small:nth-of-type(2), header small:nth-of-type(2), .jobs-search-results-list__subtitle',
   };
 
+  // Quando o Chrome recarrega a extensão (chrome://extensions reload, ou auto-
+  // reload em dev), os content scripts injetados continuam vivos na página, mas
+  // o runtime da extensão sumiu. Qualquer chrome.runtime.sendMessage lança
+  // "Extension context invalidated". O MutationObserver pode disparar runOnce()
+  // a qualquer momento depois disso. Guardamos com chrome.runtime?.id e
+  // desligamos o observer assim que detectarmos.
+  let obs = null;
+
   runOnce();
 
   // Lazy-load: o LinkedIn injeta cards conforme o usuário rola a lista.
   // Observar o <main> inteiro (o <ul> aparece/some entre renders do Ember).
-  const observerRoot = document.querySelector("main") || document.body;
-  const obs = new MutationObserver(debounce(runOnce, 400));
-  obs.observe(observerRoot, { childList: true, subtree: true });
+  if (extensionAlive()) {
+    const observerRoot = document.querySelector("main") || document.body;
+    obs = new MutationObserver(debounce(runOnce, 400));
+    obs.observe(observerRoot, { childList: true, subtree: true });
+  }
 
   // ---------- main ----------
 
   function runOnce() {
+    if (!extensionAlive()) {
+      disconnectAndStop();
+      return;
+    }
     const list = findResultsList();
     const cards = list
       ? list.querySelectorAll(SELECTORS.cardInList)
@@ -145,6 +159,10 @@
   }
 
   function send(items, totalAvailable) {
+    if (!extensionAlive()) {
+      disconnectAndStop();
+      return;
+    }
     const msg = {
       type: "DOM_COUNT",
       domain: "linkedin",
@@ -152,7 +170,30 @@
       items,
     };
     if (typeof totalAvailable === "number") msg.totalAvailable = totalAvailable;
-    chrome.runtime.sendMessage(msg);
+    try {
+      chrome.runtime.sendMessage(msg);
+    } catch (err) {
+      // Race entre extensionAlive() e sendMessage: o runtime pode cair entre
+      // o guard e a chamada. Desliga o observer e segue silencioso.
+      if (/Extension context invalidated/i.test(err.message)) {
+        disconnectAndStop();
+      } else {
+        console.debug("[linkedin_search_parser] sendMessage falhou:", err.message);
+      }
+    }
+  }
+
+  function extensionAlive() {
+    // chrome.runtime.id vira undefined após a extensão ser recarregada — é o
+    // sinal canônico para detectar contexto inválido em content scripts MV3.
+    return typeof chrome !== "undefined" && !!chrome.runtime && !!chrome.runtime.id;
+  }
+
+  function disconnectAndStop() {
+    if (obs) {
+      obs.disconnect();
+      obs = null;
+    }
   }
 
   function debounce(fn, ms) {

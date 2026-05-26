@@ -36,19 +36,31 @@
     { rx: /\binternship\b|\bestágio\b/i,             v: "Internship" },
   ];
 
+  // chrome.runtime.id vira undefined depois que a extensão é recarregada.
+  // O MutationObserver continua vivo na página até o navegador derrubar o frame,
+  // então protegemos toda chamada a chrome.* atrás de extensionAlive() e
+  // desligamos o observer assim que detectarmos contexto morto.
+  let obs = null;
+
   runOnce();
 
   // O LinkedIn troca o painel direito sem navegação completa quando o usuário
   // clica em outro card. Observar o container e re-emitir.
-  const root = document.querySelector(".jobs-details__main-content, .jobs-search__job-details, main");
-  if (root) {
-    const obs = new MutationObserver(debounce(runOnce, 500));
-    obs.observe(root, { childList: true, subtree: true });
+  if (extensionAlive()) {
+    const root = document.querySelector(".jobs-details__main-content, .jobs-search__job-details, main");
+    if (root) {
+      obs = new MutationObserver(debounce(runOnce, 500));
+      obs.observe(root, { childList: true, subtree: true });
+    }
   }
 
   // ---------- main ----------
 
   function runOnce() {
+    if (!extensionAlive()) {
+      disconnectAndStop();
+      return;
+    }
     const externalId = extractExternalId();
     const job_title = textOf(document, SELECTORS.title);
     if (!externalId || !job_title) {
@@ -136,12 +148,37 @@
   }
 
   function send(items) {
-    chrome.runtime.sendMessage({
-      type: "DOM_COUNT",
-      domain: "linkedin",
-      count: items.length,
-      items,
-    });
+    if (!extensionAlive()) {
+      disconnectAndStop();
+      return;
+    }
+    try {
+      chrome.runtime.sendMessage({
+        type: "DOM_COUNT",
+        domain: "linkedin",
+        count: items.length,
+        items,
+      });
+    } catch (err) {
+      // Race entre extensionAlive() e sendMessage: o runtime pode cair entre
+      // o guard e a chamada. Desliga o observer e segue silencioso.
+      if (/Extension context invalidated/i.test(err.message)) {
+        disconnectAndStop();
+      } else {
+        console.debug("[linkedin_detail_parser] sendMessage falhou:", err.message);
+      }
+    }
+  }
+
+  function extensionAlive() {
+    return typeof chrome !== "undefined" && !!chrome.runtime && !!chrome.runtime.id;
+  }
+
+  function disconnectAndStop() {
+    if (obs) {
+      obs.disconnect();
+      obs = null;
+    }
   }
 
   function debounce(fn, ms) {
