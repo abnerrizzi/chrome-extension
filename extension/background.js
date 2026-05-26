@@ -44,12 +44,51 @@ const DOMAIN_REGISTRY = [
   },
 ];
 
+// Reconcile o registro de content scripts com DOMAIN_REGISTRY:
+//   1. Remove órfãos (IDs que existem no Chrome mas saíram do registry — ex.:
+//      "linkedin" depois do split em search/detail).
+//   2. Atualiza IDs que já existem (cobre mudanças de `matches` / `js` entre
+//      versões sem trocar o ID).
+//   3. Registra IDs novos.
+//
+// O try/catch cobre o race entre onInstalled e onStartup quando os dois
+// disparam concorrentemente. Como o reconcile agora também (des)registra e
+// atualiza, o erro benigno pode ser "Duplicate script ID" (registrar id que o
+// outro já criou) OU "Nonexistent script ID" (des/atualizar id que o outro já
+// removeu). Em ambos a invocação que perdeu o race só constata que o trabalho
+// já foi feito e segue silenciosa.
 async function registerAllParsers() {
-  const existing = await chrome.scripting.getRegisteredContentScripts();
-  const existingIds = new Set(existing.map((s) => s.id));
-  const toAdd = DOMAIN_REGISTRY.filter((d) => !existingIds.has(d.id));
-  if (toAdd.length === 0) return;
-  await chrome.scripting.registerContentScripts(toAdd);
+  try {
+    const existing = await chrome.scripting.getRegisteredContentScripts();
+    const existingIds = new Set(existing.map((s) => s.id));
+    const wantedIds   = new Set(DOMAIN_REGISTRY.map((d) => d.id));
+
+    const orphanIds = [...existingIds].filter((id) => !wantedIds.has(id));
+    if (orphanIds.length > 0) {
+      await chrome.scripting.unregisterContentScripts({ ids: orphanIds });
+    }
+
+    const toUpdate = DOMAIN_REGISTRY.filter((d) => existingIds.has(d.id));
+    const toAdd    = DOMAIN_REGISTRY.filter((d) => !existingIds.has(d.id));
+
+    if (toUpdate.length > 0) await chrome.scripting.updateContentScripts(toUpdate);
+    if (toAdd.length    > 0) await chrome.scripting.registerContentScripts(toAdd);
+  } catch (err) {
+    if (isBenignRaceError(err)) {
+      console.debug("registerAllParsers: race (já reconciliado)", err && err.message);
+      return;
+    }
+    throw err;
+  }
+}
+
+// Erros esperados quando onInstalled e onStartup reconciliam concorrentemente:
+// registrar um id que o outro já criou, ou (des)atualizar um id que o outro já
+// removeu. O `|| ""` evita TypeError caso o throw não seja um Error.
+function isBenignRaceError(err) {
+  return /Duplicate script ID|Nonexistent script ID|does not exist/i.test(
+    (err && err.message) || ""
+  );
 }
 
 chrome.runtime.onInstalled.addListener(() => {
