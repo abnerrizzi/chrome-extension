@@ -16,6 +16,16 @@ const DOMAIN_REGISTRY = [
     allFrames: true,
     runAt: "document_idle",
   },
+  {
+    // Um único id/parser cobre busca (/jobs/search, /jobs/collections) e detalhe
+    // (/jobs/view). O parser decide qual domínio emitir ("linkedin" ou
+    // "linkedin_detail") conforme o tipo de página detectado.
+    id: "linkedin",
+    js: ["parsers/linkedin_parser.js"],
+    matches: ["*://*.linkedin.com/jobs/*"],
+    allFrames: false,
+    runAt: "document_idle",
+  },
 ];
 
 // Reconcile o registro de content scripts com DOMAIN_REGISTRY:
@@ -133,7 +143,8 @@ async function autoSendIfEnabled(tabId, domain, items) {
   if (!autoSend) return;
 
   const hash = payloadHash(domain, items);
-  const lastKey = `tab:${tabId}:lastSentHash`;
+  // Dedupe por domínio: lista e detalhe na mesma aba têm hashes independentes.
+  const lastKey = `tab:${tabId}:${domain}:lastSentHash`;
   const last = (await chrome.storage.session.get(lastKey))[lastKey];
   if (last === hash) return; // dedupe — já enviado este snapshot
 
@@ -152,14 +163,23 @@ async function autoSendIfEnabled(tabId, domain, items) {
   }
 }
 
+// Domínios terminados em `_detail` carregam UM item enriquecido (detalhe de
+// uma vaga) e coexistem na mesma aba com o domínio de lista. Eles não mexem no
+// badge (que reflete a contagem da lista) e vivem num slot de storage separado.
+const isDetailDomain = (domain) => /_detail$/.test(domain || "");
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || msg.type !== "DOM_COUNT") return false;
   const tabId = sender.tab && sender.tab.id;
-  setBadge(tabId, msg.count).catch((err) => console.error("setBadge", err));
 
-  // Persiste o último payload por aba para o popup recuperar.
+  if (!isDetailDomain(msg.domain)) {
+    setBadge(tabId, msg.count).catch((err) => console.error("setBadge", err));
+  }
+
+  // Persiste o último payload por aba para o popup recuperar. Lista → `tab:<id>`
+  // (compat com OLX/auctions/popup); detalhe → `tab:<id>:detail` (não sobrescreve).
   if (tabId) {
-    const key = `tab:${tabId}`;
+    const key = isDetailDomain(msg.domain) ? `tab:${tabId}:detail` : `tab:${tabId}`;
     const stored = {
       domain: msg.domain,
       count: msg.count,
@@ -178,7 +198,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return true;
 });
 
-// Limpa storage da aba quando ela é fechada (o badge é zerado automaticamente pelo Chromium).
-chrome.tabs.onRemoved.addListener((tabId) => {
-  chrome.storage.session.remove([`tab:${tabId}`, `tab:${tabId}:lastSentHash`]).catch(() => {});
+// Limpa storage da aba quando ela é fechada (o badge é zerado automaticamente
+// pelo Chromium). Remove todas as chaves da aba: `tab:<id>`, `tab:<id>:detail`
+// e os `tab:<id>:<domain>:lastSentHash` de cada domínio.
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  try {
+    const all = await chrome.storage.session.get(null);
+    const drop = Object.keys(all).filter(
+      (k) => k === `tab:${tabId}` || k.startsWith(`tab:${tabId}:`),
+    );
+    if (drop.length) await chrome.storage.session.remove(drop);
+  } catch (_) {}
 });

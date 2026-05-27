@@ -37,7 +37,7 @@
 ## EPIC-006 — Módulo LinkedIn (lista + detalhe, guest + logado)
 - [ ] ST-021 Captura/validação do DOM logado (HTML real, confirmar SEL.LOGGEDIN)
 - [x] ST-022 Parser dual-DOM `linkedin_parser.js` (detect guest/logado, lista/detalhe, acumulação por scroll, guards MV3)
-- [ ] ST-023 `background.js`: storage `tab:<id>:detail`, badge guard `_detail$`, dedupe por domínio, cleanup + registro no DOMAIN_REGISTRY
+- [x] ST-023 `background.js`: storage `tab:<id>:detail`, badge guard `_detail$`, dedupe por domínio, cleanup + registro no DOMAIN_REGISTRY
 - [ ] ST-024 `manifest.json`: host_permissions linkedin + web_accessible_resources
 - [ ] ST-025 `popup.js`: previewFields `linkedin` + `linkedin_detail`
 - [x] ST-026 Schemas `linkedin.json` (lista) + `linkedin_detail.json` (detalhe)
