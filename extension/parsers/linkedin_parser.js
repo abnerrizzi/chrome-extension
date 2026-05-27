@@ -40,12 +40,19 @@
     observer: null,
     debounceTimer: null,
     lastSig: {},          // domínio -> assinatura do último envio (anti-spam)
+    searchKey: null,      // identidade da busca corrente (reset do acumulador)
     runOnce: null,
   };
   window[KEY] = state;
 
   const DEBOUNCE_MS = 350;
   const EMIT_DETAIL_ALONGSIDE_LIST = true;
+
+  // Params que NÃO definem uma nova busca: abrir um detalhe (currentJobId) e
+  // paginar (start/pageNum/position) — paginação deve ACUMULAR, não resetar.
+  const SEARCH_KEY_IGNORE = new Set([
+    "currentJobId", "start", "pageNum", "position", "refId", "trackingId", "trk",
+  ]);
 
   const SEL = {
     GUEST: {
@@ -296,6 +303,33 @@
     return Array.from(state.acc.values());
   }
 
+  // Identidade da busca = pathname + query params que definem o conjunto de
+  // resultados (ignora paginação e abertura de detalhe). O estado vive em
+  // `window` e sobrevive ao pushState, então uma NOVA busca (mudou keywords/
+  // location/filtros) precisa descartar o acúmulo da busca anterior — senão
+  // vagas antigas vazariam para a contagem e o POST da nova busca.
+  function computeSearchKey() {
+    try {
+      const parts = [];
+      for (const [k, v] of new URLSearchParams(location.search).entries()) {
+        if (!SEARCH_KEY_IGNORE.has(k)) parts.push(k + "=" + v);
+      }
+      parts.sort();
+      return location.pathname + "?" + parts.join("&");
+    } catch (_) {
+      return location.pathname;
+    }
+  }
+
+  function resetIfNewSearch() {
+    const key = computeSearchKey();
+    if (state.searchKey !== null && state.searchKey !== key) {
+      state.acc.clear();
+      state.lastSig = {};  // força re-emissão da nova lista (menor)
+    }
+    state.searchKey = key;
+  }
+
   // ---------- envio ----------
 
   function signature(domain, items) {
@@ -305,7 +339,8 @@
   }
 
   function emit(domain, count, items, debug) {
-    if (state.stopped || !extensionAlive()) return;
+    if (state.stopped) return;
+    if (!extensionAlive()) { disconnectAndStop(); return; }  // contexto morto → para o observer
     const sig = signature(domain, items);
     if (state.lastSig[domain] === sig) return;  // nada mudou — não re-envia
     const msg = { type: "DOM_COUNT", domain, count, items };
@@ -349,6 +384,7 @@
       }
       ensureObserver();
       if (ctx.page === "list") {
+        resetIfNewSearch();
         emitList(ctx);
         // Logado com painel aberto: emite o detalhe da vaga aberta também.
         if (EMIT_DETAIL_ALONGSIDE_LIST && ctx.view === "loggedin" && isLoggedInDetailOpen()) {
