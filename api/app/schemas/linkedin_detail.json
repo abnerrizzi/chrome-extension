@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LinkedInJobDetail",
+  "type": "object",
+  "required": ["title", "url"],
+  "properties": {
+    "external_id":     { "type": "string", "description": "ID numérico da vaga — chave de join com o card da lista" },
+    "title":           { "type": "string", "description": "Título da vaga" },
+    "company":         { "type": "string", "description": "Nome da empresa" },
+    "location":        { "type": "string", "description": "Localização crua" },
+    "url":             { "type": "string", "description": "URL canônica da vaga" },
+    "description":     { "type": "string", "description": "Texto completo da descrição da vaga" },
+    "seniority":       { "type": "string", "description": "Nível de senioridade (ex: 'Mid-Senior level')" },
+    "employment_type": { "type": "string", "description": "Regime de contratação (ex: 'Full-time')" },
+    "applicants_raw":  { "type": "string", "description": "Texto cru de candidaturas (ex: 'Over 200 applicants')" },
+    "source_view":     { "type": "string", "enum": ["guest", "loggedin"], "description": "DOM de origem: guest ou loggedin" }
+  }
+}
