@@ -145,7 +145,7 @@ Two valid shapes:
 
 References:
 - Hydration-blob: `extension/parsers/olx_parser.js`.
-- DOM: `extension/parsers/linkedin_parser.js` (stub).
+- DOM-scraping: write selectors against the live DOM; concentrate them in one `SELECTORS` const for easy maintenance.
 
 ### 3. `extension/manifest.json`
 

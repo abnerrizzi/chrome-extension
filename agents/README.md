@@ -15,7 +15,6 @@ where reading the entire codebase first would be wasteful.
 - [`architecture.md`](architecture.md) — three-layer system spec (extension, API, DB), end-to-end data flow, invariants that must not be broken, and what is intentionally out of scope.
 - [`add-domain-module.md`](add-domain-module.md) — the reusable contract for adding a new domain module. Five files in lockstep, type-mapping table (Postgres ↔ SQLite), verification checklist. Hand this to a session along with the domain-specific brief.
 - [`domain-olx.md`](domain-olx.md) — reference implementation notes. OLX is the gold standard; read this when designing a new domain that needs `__NEXT_DATA__`-style extraction or non-trivial normalization.
-- [`domain-linkedin.md`](domain-linkedin.md) — current state of the LinkedIn module (a stub) plus a fleshout brief. The natural next-module candidate.
 - [`domain-auctions.md`](domain-auctions.md) — placeholder module against a non-existent host; scaffolding only. Reuse when a real auctions site is targeted.
 - [`claude-code-prompt.md`](claude-code-prompt.md) — historical record of the original scaffold prompt. Kept for context, not for direct reuse.
 
