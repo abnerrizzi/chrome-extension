@@ -31,6 +31,17 @@ Liquibase changeset id (e.g. `olx-004`).
   em vez de `psycopg` direto, rodando contra qualquer backend.
 - `README.md` e `CLAUDE.md` documentam a seleção dual-backend.
 
+## [0.3.7] — 2026-05-27
+
+### Fixed
+- **O parser de detalhe não sobrescreve mais a lista de vagas.** Em
+  `/jobs/search/?currentJobId=<id>` os dois parsers rodam; a vaga única do
+  detalhe (com `description`) clobava o payload `tab:<id>` e o badge, escondendo
+  a lista. Agora o detalhe envia `kind:"detail"` e o `background.js` o trata como
+  **canal de enriquecimento**: faz upsert no backend (dedupe próprio em
+  `lastDetailHash`), mas não mexe no badge nem no `tab:<id>`. A lista manda no
+  display.
+
 ## [0.3.6] — 2026-05-27
 
 ### Added

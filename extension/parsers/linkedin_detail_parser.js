@@ -156,6 +156,9 @@
       chrome.runtime.sendMessage({
         type: "DOM_COUNT",
         domain: "linkedin",
+        // Canal de enriquecimento: o background só faz upsert no backend e NÃO
+        // deixa esta vaga única sobrescrever a lista no badge/popup.
+        kind: "detail",
         count: items.length,
         items,
       });

@@ -150,7 +150,7 @@ function payloadHash(domain, items) {
   return `${domain}|${ids}`;
 }
 
-async function autoSendIfEnabled(tabId, domain, items) {
+async function autoSendIfEnabled(tabId, domain, items, hashKeySuffix = "lastSentHash") {
   if (!Array.isArray(items) || items.length === 0) return;
   const { autoSend, apiUrl } = await chrome.storage.sync.get({
     autoSend: false,
@@ -159,7 +159,9 @@ async function autoSendIfEnabled(tabId, domain, items) {
   if (!autoSend) return;
 
   const hash = payloadHash(domain, items);
-  const lastKey = `tab:${tabId}:lastSentHash`;
+  // Canais separados (lista vs. detalhe) usam chaves de dedupe distintas para
+  // não thrashar um ao outro quando ambos rodam na mesma aba.
+  const lastKey = `tab:${tabId}:${hashKeySuffix}`;
   const last = (await chrome.storage.session.get(lastKey))[lastKey];
   if (last === hash) return; // dedupe — já enviado este snapshot
 
@@ -181,6 +183,21 @@ async function autoSendIfEnabled(tabId, domain, items) {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || msg.type !== "DOM_COUNT") return false;
   const tabId = sender.tab && sender.tab.id;
+
+  // Canal de enriquecimento (parser de detalhe): só faz upsert no backend.
+  // NÃO mexe no badge nem no payload `tab:<id>` — senão a vaga única com
+  // description sobrescreve a lista na popup/badge quando os dois parsers
+  // rodam juntos em /jobs/search/?currentJobId=. A lista manda no display.
+  if (msg.kind === "detail") {
+    if (tabId) {
+      autoSendIfEnabled(tabId, msg.domain, msg.items || [], "lastDetailHash").catch(
+        (err) => console.error("autoSend(detail)", err),
+      );
+    }
+    sendResponse({ ok: true });
+    return true;
+  }
+
   setBadge(tabId, msg.count).catch((err) => console.error("setBadge", err));
 
   // Persiste o último payload por aba para o popup recuperar.
@@ -207,5 +224,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 // Limpa storage da aba quando ela é fechada (o badge é zerado automaticamente pelo Chromium).
 chrome.tabs.onRemoved.addListener((tabId) => {
-  chrome.storage.session.remove([`tab:${tabId}`, `tab:${tabId}:lastSentHash`]).catch(() => {});
+  chrome.storage.session
+    .remove([`tab:${tabId}`, `tab:${tabId}:lastSentHash`, `tab:${tabId}:lastDetailHash`])
+    .catch(() => {});
 });
