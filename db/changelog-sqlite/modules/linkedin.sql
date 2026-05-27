@@ -41,3 +41,16 @@ ALTER TABLE linkedin_jobs ADD COLUMN description TEXT;
 ALTER TABLE linkedin_jobs ADD COLUMN workplace_type TEXT;
 --rollback ALTER TABLE linkedin_jobs DROP COLUMN description;
 --rollback ALTER TABLE linkedin_jobs DROP COLUMN workplace_type;
+
+
+--changeset claude:linkedin-005-detail-extra
+--preconditions onFail:HALT onError:HALT
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM pragma_table_info('linkedin_jobs') WHERE name='employment_type'
+ALTER TABLE linkedin_jobs ADD COLUMN employment_type TEXT;
+ALTER TABLE linkedin_jobs ADD COLUMN job_function TEXT;
+ALTER TABLE linkedin_jobs ADD COLUMN industries TEXT;
+ALTER TABLE linkedin_jobs ADD COLUMN raw_json TEXT;
+--rollback ALTER TABLE linkedin_jobs DROP COLUMN employment_type;
+--rollback ALTER TABLE linkedin_jobs DROP COLUMN job_function;
+--rollback ALTER TABLE linkedin_jobs DROP COLUMN industries;
+--rollback ALTER TABLE linkedin_jobs DROP COLUMN raw_json;

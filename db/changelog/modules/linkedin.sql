@@ -41,3 +41,16 @@ ALTER TABLE linkedin_jobs ADD COLUMN description TEXT;
 ALTER TABLE linkedin_jobs ADD COLUMN workplace_type VARCHAR(32);
 --rollback ALTER TABLE linkedin_jobs DROP COLUMN IF EXISTS description;
 --rollback ALTER TABLE linkedin_jobs DROP COLUMN IF EXISTS workplace_type;
+
+
+--changeset claude:linkedin-005-detail-extra
+--preconditions onFail:HALT onError:HALT
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='linkedin_jobs' AND column_name='employment_type'
+ALTER TABLE linkedin_jobs ADD COLUMN employment_type VARCHAR(64);
+ALTER TABLE linkedin_jobs ADD COLUMN job_function VARCHAR(128);
+ALTER TABLE linkedin_jobs ADD COLUMN industries VARCHAR(256);
+ALTER TABLE linkedin_jobs ADD COLUMN raw_json JSONB;
+--rollback ALTER TABLE linkedin_jobs DROP COLUMN IF EXISTS employment_type;
+--rollback ALTER TABLE linkedin_jobs DROP COLUMN IF EXISTS job_function;
+--rollback ALTER TABLE linkedin_jobs DROP COLUMN IF EXISTS industries;
+--rollback ALTER TABLE linkedin_jobs DROP COLUMN IF EXISTS raw_json;
