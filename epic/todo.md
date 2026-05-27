@@ -10,7 +10,7 @@
 
 ## EPIC-002 — Lógica Modular Desacoplada dos Extractors
 - [x] ST-005 Motor Dinâmico de Modulação Injetada (Content Scripts Orchestrator)
-- [ ] ST-006 Módulo LinkedIn de Extrações Profissionais — **removido; a reconstruir do zero**
+- [ ] ST-006 Módulo LinkedIn de Extrações Profissionais — **reconstruído em EPIC-006**
 - [x] ST-007 Módulo OLX Classificados
 - [x] ST-007b Módulo Auctions (extensão lógica do EPIC-002)
 - [x] ST-007c Refinamento OLX (kind venda/aluguel, neighbourhood, observabilidade __NEXT_DATA__)
@@ -34,8 +34,23 @@
 - [x] ST-019 Targets `make up-postgres`/`up-sqlite`/`down` e `tag_release.sh --backend`
 - [x] ST-020 Cobertura de testes (`test_db_dialect.py` + dedup via shim)
 
+## EPIC-006 — Módulo LinkedIn (lista + detalhe, guest + logado)
+- [ ] ST-021 Captura/validação do DOM logado (HTML real, confirmar SEL.LOGGEDIN)
+- [x] ST-022 Parser dual-DOM `linkedin_parser.js` (detect guest/logado, lista/detalhe, acumulação por scroll, guards MV3)
+- [ ] ST-023 `background.js`: storage `tab:<id>:detail`, badge guard `_detail$`, dedupe por domínio, cleanup + registro no DOMAIN_REGISTRY
+- [ ] ST-024 `manifest.json`: host_permissions linkedin + web_accessible_resources
+- [ ] ST-025 `popup.js`: previewFields `linkedin` + `linkedin_detail`
+- [x] ST-026 Schemas `linkedin.json` (lista) + `linkedin_detail.json` (detalhe)
+- [x] ST-027 Normalizers `normalization/linkedin.py` + registro em `ingest.py` NORMALIZERS
+- [x] ST-028 Persistence: branches `linkedin`→`linkedin_jobs`, `linkedin_detail`→`linkedin_job_details`
+- [x] ST-029 Liquibase `modules/linkedin.sql` (2 tabelas + external_id) nas 2 árvores + includes
+- [x] ST-030 Testes ingest (422, normalização lista+detalhe, upsert dedupe) — passam em Postgres e SQLite
+- [ ] ST-031 CHANGELOG + bump manifest version + atualizar nota CLAUDE.md
+
 ## Infraestrutura transversal
 - [x] Docker Compose orquestrando db + api + liquibase
 - [x] Skill `/commit` Conventional Commits (1-linha ≤75 chars)
+- [x] Skill `/feature-branch` posiciona branch a partir da base escolhida
+- [x] Skill `/epic-sync` registra Epics/Stories do plano e mantém `epic/todo.md` em sincronia
 - [x] Hook `PostToolUse` invocando `/commit`
 - [x] `epic/todo.md` mantido em sincronia com o progresso
