@@ -13,16 +13,31 @@
 // external_id no backend torna o re-POST da união idempotente.
 (function () {
   const SELECTORS = {
-    // O <ul> de resultados tem classe ofuscada/aleatória — inútil como seletor.
-    // Cada vaga é um <li data-occludable-job-id="<id>"> (presente em todos).
-    cardFallback: "li.scaffold-layout__list-item, li.jobs-search-results__list-item, div[data-job-id]",
-    // Conteúdo renderizado (artdeco entity-lockup). O título duplica o texto num
-    // par <span aria-hidden> + <span visually-hidden> — cleanText() resolve.
-    title:    ".artdeco-entity-lockup__title, .job-card-list__title--link, .job-card-list__title",
-    company:  ".artdeco-entity-lockup__subtitle, .job-card-container__primary-description",
-    location: ".artdeco-entity-lockup__caption, .job-card-container__metadata-wrapper, .job-card-container__metadata-item",
-    // "1,234 results" no header da lista (versão logada). Pego como metadata.
-    totalCount: '#main header small:nth-of-type(2), header small:nth-of-type(2), .jobs-search-results-list__subtitle',
+    // Dois DOMs: LOGADO (SPA Ember — `artdeco-entity-lockup`, `<ul>` de classe
+    // ofuscada, `<li data-occludable-job-id>`) e GUEST/deslogado (HTML
+    // server-rendered — `base-search-card`, `ul.jobs-search__results-list`).
+    // A extensão roda logado; os seletores `base-*`/`job-search-card__*` são o
+    // fallback guest, portados do scraper Selenium de referência
+    // (jobhubmine/scrapers/linkedin-ff-selenium). Ordem: logado primeiro.
+    cardFallback:
+      "li.scaffold-layout__list-item, li.jobs-search-results__list-item, " +
+      "ul.jobs-search__results-list > li, li.base-card, div[data-job-id]",
+    // Título: logado duplica o texto num par <span aria-hidden>+<span
+    // visually-hidden> — cleanText() resolve; guest é h3.base-search-card__title.
+    title:
+      ".artdeco-entity-lockup__title, .job-card-list__title--link, " +
+      ".job-card-list__title, h3.base-search-card__title",
+    company:
+      ".artdeco-entity-lockup__subtitle, .job-card-container__primary-description, " +
+      "h4.base-search-card__subtitle",
+    location:
+      ".artdeco-entity-lockup__caption, .job-card-container__metadata-wrapper, " +
+      ".job-card-container__metadata-item, span.job-search-card__location",
+    // Total de vagas: logado ("1.234 results" no header) + guest
+    // (results-context-header__job-count).
+    totalCount:
+      "#main header small:nth-of-type(2), header small:nth-of-type(2), " +
+      ".jobs-search-results-list__subtitle, span.results-context-header__job-count",
   };
 
   // União acumulada das vagas vistas nesta injeção, por external_id.
@@ -93,6 +108,9 @@
     if (best) return best.querySelectorAll(":scope > li[data-occludable-job-id]");
     const within = document.querySelectorAll("main li[data-occludable-job-id]");
     if (within.length) return within;
+    // Guest/deslogado: lista server-rendered sem data-occludable-job-id.
+    const guest = document.querySelectorAll("ul.jobs-search__results-list > li, li.base-card");
+    if (guest.length) return guest;
     return document.querySelectorAll(SELECTORS.cardFallback);
   }
 
@@ -112,8 +130,8 @@
   }
 
   function extractExternalId(el) {
-    // 1. data-occludable-job-id no próprio <li>. 2. data-job-id (li ou
-    // descendente). 3. /jobs/view/<id>/ do anchor canônico. Nunca id="ember…".
+    // Ordem de confiabilidade (logado → guest). Nunca usar id="ember…".
+    // 1. data-occludable-job-id / data-job-id (logado, no <li> ou descendente).
     const direct =
       el.getAttribute("data-occludable-job-id") || el.getAttribute("data-job-id");
     if (direct) return direct;
@@ -124,8 +142,20 @@
         nested.getAttribute("data-job-id")
       );
     }
-    const a = el.querySelector('a[href*="/jobs/view/"]');
-    const m = a && a.getAttribute("href").match(/\/jobs\/view\/(\d+)/);
+    // 2. data-entity-urn (guest, em div.base-card) → dígitos. Ex.:
+    //    "urn:li:jobPosting:4415550496".
+    const urnEl = el.matches("[data-entity-urn]")
+      ? el
+      : el.querySelector("[data-entity-urn]");
+    const urn = urnEl && urnEl.getAttribute("data-entity-urn");
+    if (urn) {
+      const digits = urn.replace(/\D/g, "");
+      if (digits) return digits;
+    }
+    // 3. dígitos finais em /jobs/view/<id>/ ou /view/<slug>-<id> (guest).
+    const a = el.querySelector('a[href*="/jobs/view/"], a.base-card__full-link');
+    const href = a && a.getAttribute("href");
+    const m = href && href.match(/\/(?:jobs\/)?view\/(?:[^/?#]*?-)?(\d+)/);
     return m ? m[1] : null;
   }
 
