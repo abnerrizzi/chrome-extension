@@ -60,8 +60,9 @@ def _insert_items(cur, domain_id: str, session_id: int, items: list[dict]) -> No
             db.q(
                 "INSERT INTO linkedin_jobs "
                 "(session_id, external_id, job_title, company, location, url, "
-                " description, seniority, workplace_type, posted_at, skills) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?) "
+                " description, seniority, workplace_type, posted_at, "
+                " employment_type, job_function, industries, raw_json, skills) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
                 f"{on_conflict} "
                 "  session_id=EXCLUDED.session_id, "
                 "  job_title=EXCLUDED.job_title, "
@@ -72,12 +73,18 @@ def _insert_items(cur, domain_id: str, session_id: int, items: list[dict]) -> No
                 "  seniority=COALESCE(EXCLUDED.seniority, linkedin_jobs.seniority), "
                 "  workplace_type=COALESCE(EXCLUDED.workplace_type, linkedin_jobs.workplace_type), "
                 "  posted_at=COALESCE(EXCLUDED.posted_at, linkedin_jobs.posted_at), "
+                "  employment_type=COALESCE(EXCLUDED.employment_type, linkedin_jobs.employment_type), "
+                "  job_function=COALESCE(EXCLUDED.job_function, linkedin_jobs.job_function), "
+                "  industries=COALESCE(EXCLUDED.industries, linkedin_jobs.industries), "
+                "  raw_json=COALESCE(EXCLUDED.raw_json, linkedin_jobs.raw_json), "
                 "  skills=COALESCE(EXCLUDED.skills, linkedin_jobs.skills)"
             ),
             [(session_id, it.get("external_id"), it.get("job_title"),
               it.get("company"), it.get("location"), it.get("url"),
               it.get("description"), it.get("seniority"),
               it.get("workplace_type"), it.get("posted_at"),
+              it.get("employment_type"), it.get("job_function"),
+              it.get("industries"), it.get("raw_json"),
               it.get("skills")) for it in items],
         )
     elif domain_id == "olx":

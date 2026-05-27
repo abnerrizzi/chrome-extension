@@ -73,19 +73,36 @@ def _opt_str(raw):
     return s or None
 
 
+def _raw_to_json(raw):
+    """`raw_json` catch-all: o parser já manda string JSON; se vier dict/list,
+    serializa. Armazenado em JSONB (Postgres) / TEXT (SQLite), como skills."""
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        return raw or None
+    try:
+        return json.dumps(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 def normalize(items: list[dict]) -> list[dict]:
     return [
         {
-            "external_id":    it.get("external_id"),
-            "job_title":      (it.get("job_title") or "").strip(),
-            "company":        _opt_str(it.get("company")),
-            "location":       _opt_str(it.get("location")),
-            "url":            it.get("url"),
-            "description":    _opt_str(it.get("description")),
-            "seniority":      _opt_str(it.get("seniority")),
-            "workplace_type": _opt_str(it.get("workplace_type")),
-            "posted_at":      _posted_at_to_iso(it.get("posted_at")),
-            "skills":         _skills_to_json(it.get("skills")),
+            "external_id":     it.get("external_id"),
+            "job_title":       (it.get("job_title") or "").strip(),
+            "company":         _opt_str(it.get("company")),
+            "location":        _opt_str(it.get("location")),
+            "url":             it.get("url"),
+            "description":     _opt_str(it.get("description")),
+            "seniority":       _opt_str(it.get("seniority")),
+            "workplace_type":  _opt_str(it.get("workplace_type")),
+            "posted_at":       _posted_at_to_iso(it.get("posted_at")),
+            "employment_type": _opt_str(it.get("employment_type")),
+            "job_function":    _opt_str(it.get("job_function")),
+            "industries":      _opt_str(it.get("industries")),
+            "raw_json":        _raw_to_json(it.get("raw_json")),
+            "skills":          _skills_to_json(it.get("skills")),
         }
         for it in items
     ]

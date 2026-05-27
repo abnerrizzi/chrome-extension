@@ -13,6 +13,10 @@
     "seniority":      { "type": "string", "description": "Ex.: Mid-Senior level, Entry level (somente detalhe)" },
     "workplace_type": { "type": "string", "description": "Remote, Hybrid ou On-site (somente detalhe)" },
     "posted_at":      { "type": "string", "description": "Data de publicação (ISO-8601 ou texto relativo 'X days ago')" },
+    "employment_type":{ "type": "string", "description": "Ex.: Full-time, Contract, Internship (critério da vaga)" },
+    "job_function":   { "type": "string", "description": "Função da vaga (critério 'Job function')" },
+    "industries":     { "type": "string", "description": "Setores (critério 'Industries')" },
+    "raw_json":       { "type": "string", "description": "JSON serializado com todos os critérios/chips capturados do detalhe" },
     "skills": {
       "type": "array",
       "items": { "type": "string" },
