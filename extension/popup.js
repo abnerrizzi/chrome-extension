@@ -76,6 +76,21 @@ function previewFields(domain, item) {
       meta:  [item.kind, shortenUrl(item.url)].filter(Boolean).join(" · "),
     };
   }
+  if (domain === "linkedin") {
+    return {
+      title: item.title || "",
+      price: item.company || "",
+      meta:  [item.location, shortenUrl(item.url)].filter(Boolean).join(" · "),
+    };
+  }
+  if (domain === "linkedin_detail") {
+    return {
+      title: item.title || "",
+      price: item.seniority || "",
+      meta:  [item.employment_type, item.applicants_raw || item.applicants]
+               .filter(Boolean).join(" · "),
+    };
+  }
   // default
   return {
     title: item.title || "",

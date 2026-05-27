@@ -12,7 +12,8 @@
   ],
   "host_permissions": [
     "*://*.olx.com.br/*",
-    "*://*.auctions.example/*"
+    "*://*.auctions.example/*",
+    "*://*.linkedin.com/*"
   ],
   "optional_host_permissions": [
     "http://*/*",
@@ -48,6 +49,10 @@
     {
       "resources": ["parsers/auctions_parser.js"],
       "matches": ["*://*.auctions.example/*"]
+    },
+    {
+      "resources": ["parsers/linkedin_parser.js"],
+      "matches": ["*://*.linkedin.com/*"]
     }
   ]
 }
