@@ -47,6 +47,7 @@
 - [x] ST-030 Testes ingest (422, normalização lista+detalhe, upsert dedupe) — passam em Postgres e SQLite
 - [x] ST-031 CHANGELOG + bump manifest version + atualizar nota CLAUDE.md
 - [x] ST-032 Pipeline `make linkedin-run` + `scripts/extract_linkedin.py` (guest), espelha o pipeline OLX
+- [x] ST-033 Testes extras: `scripts/test_extract_linkedin.py` (extractor guest) + join lista×detalhe por external_id
 
 ## Infraestrutura transversal
 - [x] Docker Compose orquestrando db + api + liquibase

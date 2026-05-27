@@ -121,15 +121,20 @@ class GuestCardsParser(HTMLParser):
         self._flush()
 
 
+def extract_items(html: str) -> list[dict]:
+    """Parseia o HTML guest e devolve os cards válidos (mesmo filtro tolerante
+    do parser JS: mantém se tem título e (external_id ou url))."""
+    p = GuestCardsParser()
+    p.feed(html)
+    p.close()
+    return [c for c in p.cards if c.get("title") and (c.get("external_id") or c.get("url"))]
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__, file=sys.stderr)
         sys.exit(2)
-    html = Path(sys.argv[1]).read_text(encoding="utf-8")
-    p = GuestCardsParser()
-    p.feed(html)
-    p.close()
-    items = [c for c in p.cards if c.get("title") and (c.get("external_id") or c.get("url"))]
+    items = extract_items(Path(sys.argv[1]).read_text(encoding="utf-8"))
     payload = {"domain_id": "linkedin", "raw_data": {"items": items}}
     out = json.dumps(payload, ensure_ascii=False)
     if len(sys.argv) >= 3:
