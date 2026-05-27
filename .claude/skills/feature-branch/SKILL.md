@@ -1,11 +1,11 @@
 ---
 name: feature-branch
-description: Garante que toda nova feature começa em um branch dedicado criado a partir do master/main atualizado, com nomenclatura no padrão Conventional Commits (feat|fix|chore|...).
+description: Garante que toda nova feature começa em um branch dedicado, criado a partir de um branch base escolhido pelo usuário (branch atual, main/master ou develop), com nomenclatura no padrão Conventional Commits (feat|fix|chore|...).
 ---
 
 # Skill: `/feature-branch`
 
-Garante que toda nova feature começa em um branch dedicado, criado a partir do `master` (ou `main`) atualizado.
+Garante que toda nova feature começa em um branch dedicado. O branch base é **sempre escolhido pelo usuário** (branch atual, `main`/`master`, `develop` ou outro) — o skill pergunta antes de criar.
 
 ## Quando rodar
 
@@ -26,14 +26,18 @@ Garante que toda nova feature começa em um branch dedicado, criado a partir do 
      - Mudanças relacionadas à feature ainda não iniciada são **inesperadas**: parar e perguntar ao usuário se quer commitar, stashear ou descartar.
      - **Nunca** stashar/descartar sem confirmação explícita.
 
-2. **Identificar branch base**
-   - Detectar `master` ou `main` (nessa ordem) com `git show-ref --verify --quiet refs/heads/master` / `refs/heads/main`. O nome detectado vira `$BASE`.
-   - Se já estamos em `$BASE`, segue. Se estamos em outro branch:
-     - Confirmar com o usuário (`AskUserQuestion`) que é OK abandonar o branch atual para criar um novo a partir de `$BASE`. Pode ser que o usuário queira continuar no branch atual.
+2. **Escolher o branch base — SEMPRE perguntar**
+   - **Sempre** perguntar ao usuário a partir de qual branch criar, via `AskUserQuestion`. Não assumir `main` por padrão.
+   - Montar as opções dinamicamente a partir do repo:
+     - **Branch atual** (`git rev-parse --abbrev-ref HEAD`) — útil para empilhar sobre trabalho ainda não mergeado (ex.: um fix sobre um PR aberto).
+     - **`main`/`master`** (o que existir, via `git show-ref --verify --quiet refs/heads/main` / `refs/heads/master`).
+     - **`develop`** e quaisquer outros branches de integração de longa duração que existam (`git branch --format='%(refname:short)'`).
+   - Recomendar a opção mais provável pelo contexto (ex.: se o trabalho depende de um PR aberto, sugerir o branch atual; senão, `main`), marcando-a como "(Recomendado)" — mas a escolha é do usuário. O branch escolhido vira `$BASE`.
+   - Se houver mudanças não-commitadas (passo 1) e `$BASE` for diferente do branch atual, confirmar antes de trocar — nunca perder trabalho.
 
 3. **Atualizar a base**
    - `git checkout $BASE`
-   - Se existir remote `origin`: `git pull --ff-only origin $BASE`. **Nunca** `--rebase`/`--force` aqui.
+   - Se `$BASE` tiver upstream em `origin`: `git pull --ff-only origin $BASE`. **Nunca** `--rebase`/`--force` aqui. (Branches locais sem upstream — ex.: um PR local — não precisam de pull.)
    - Se o `--ff-only` falhar (divergência local), parar e reportar — não tentar resolver automaticamente.
 
 4. **Compor o nome do branch**

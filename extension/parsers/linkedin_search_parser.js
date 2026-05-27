@@ -1,40 +1,62 @@
-// Parser LinkedIn — lista de resultados de busca (/jobs/search, /jobs/collections/*).
+// Parser LinkedIn — lista de resultados de busca (/jobs/search*, /jobs/collections/*).
 // MV3: arquivo estático, sem eval. Selectors concentrados num único bloco — o
 // LinkedIn troca classes com frequência; manter a lista pequena e óbvia
 // facilita ajustes pontuais.
 //
-// Emite items rasos: external_id (data-job-id), job_title, company, location, url.
-// A página de detalhe (linkedin_detail_parser.js) usa o mesmo external_id para
-// enriquecer a linha via upsert no backend.
+// VIRTUALIZAÇÃO: o LinkedIn mantém um <li data-occludable-job-id> por vaga
+// (todos os ~25), mas só RENDERIZA o conteúdo (<div data-job-id> com título,
+// empresa, local) dos ~7 cards perto do viewport — os demais são placeholders
+// vazios (classe `occludable-update`). Por isso um snapshot único só vê ~7.
+// Estratégia (passiva, sem auto-scroll): acumular por external_id entre
+// execuções; conforme o usuário rola, novos cards renderizam, o MutationObserver
+// dispara runOnce() e a união cresce até `totalAvailable`. O upsert por
+// external_id no backend torna o re-POST da união idempotente.
 (function () {
   const SELECTORS = {
-    // LinkedIn loga: <main>…<ul><li id="ember<N>" data-occludable-job-id="…">.
-    // O id="ember<N>" é gerado pelo Ember e troca a cada render — usar
-    // `id^="ember"` apenas como anchor estrutural, nunca como identificador.
-    cardInList:    ':scope > li[id^="ember"]',
-    cardFallback:  "li.jobs-search-results__list-item, li.scaffold-layout__list-item, div[data-job-id]",
-    title:         ".job-card-list__title, .job-card-list__title--link, a.job-card-list__title, .job-card-container__link, h3",
-    company:       ".job-card-container__primary-description, .artdeco-entity-lockup__subtitle, .job-card-container__company-name, h4",
-    location:      ".job-card-container__metadata-item, .artdeco-entity-lockup__caption",
-    // "1,234 results" no header da lista (versão logada). Pego como metadata.
-    totalCount:    '#main header small:nth-of-type(2), header small:nth-of-type(2), .jobs-search-results-list__subtitle',
+    // Dois DOMs: LOGADO (SPA Ember — `artdeco-entity-lockup`, `<ul>` de classe
+    // ofuscada, `<li data-occludable-job-id>`) e GUEST/deslogado (HTML
+    // server-rendered — `base-search-card`, `ul.jobs-search__results-list`).
+    // A extensão roda logado; os seletores `base-*`/`job-search-card__*` são o
+    // fallback guest, portados do scraper Selenium de referência
+    // (jobhubmine/scrapers/linkedin-ff-selenium). Ordem: logado primeiro.
+    cardFallback:
+      "li.scaffold-layout__list-item, li.jobs-search-results__list-item, " +
+      "ul.jobs-search__results-list > li, li.base-card, div[data-job-id]",
+    // Título: logado duplica o texto num par <span aria-hidden>+<span
+    // visually-hidden> — cleanText() resolve; guest é h3.base-search-card__title.
+    title:
+      ".artdeco-entity-lockup__title, .job-card-list__title--link, " +
+      ".job-card-list__title, h3.base-search-card__title",
+    company:
+      ".artdeco-entity-lockup__subtitle, .job-card-container__primary-description, " +
+      "h4.base-search-card__subtitle",
+    location:
+      ".artdeco-entity-lockup__caption, .job-card-container__metadata-wrapper, " +
+      ".job-card-container__metadata-item, span.job-search-card__location",
+    // Total de vagas: logado ("1.234 results" no header) + guest
+    // (results-context-header__job-count).
+    totalCount:
+      "#main header small:nth-of-type(2), header small:nth-of-type(2), " +
+      ".jobs-search-results-list__subtitle, span.results-context-header__job-count",
   };
 
-  // Quando o Chrome recarrega a extensão (chrome://extensions reload, ou auto-
-  // reload em dev), os content scripts injetados continuam vivos na página, mas
-  // o runtime da extensão sumiu. Qualquer chrome.runtime.sendMessage lança
-  // "Extension context invalidated". O MutationObserver pode disparar runOnce()
-  // a qualquer momento depois disso. Guardamos com chrome.runtime?.id e
+  // União acumulada das vagas vistas nesta injeção, por external_id.
+  const accumulated = new Map();
+  let lastTotal = -1;
+
+  // Quando o Chrome recarrega a extensão, os content scripts injetados continuam
+  // vivos na página mas o runtime sumiu — qualquer chrome.runtime.sendMessage
+  // lança "Extension context invalidated". Guardamos com chrome.runtime?.id e
   // desligamos o observer assim que detectarmos.
   let obs = null;
 
   runOnce();
 
-  // Lazy-load: o LinkedIn injeta cards conforme o usuário rola a lista.
-  // Observar o <main> inteiro (o <ul> aparece/some entre renders do Ember).
+  // Lazy-load: cards renderizam conforme o usuário rola. Observar o <main>
+  // (o <ul> aparece/some entre renders) e re-rodar; o debounce coalesce rajadas.
   if (extensionAlive()) {
     const observerRoot = document.querySelector("main") || document.body;
-    obs = new MutationObserver(debounce(runOnce, 400));
+    obs = new MutationObserver(debounce(runOnce, 350));
     obs.observe(observerRoot, { childList: true, subtree: true });
   }
 
@@ -45,70 +67,73 @@
       disconnectAndStop();
       return;
     }
-    const list = findResultsList();
-    const cards = list
-      ? list.querySelectorAll(SELECTORS.cardInList)
-      : document.querySelectorAll(SELECTORS.cardFallback);
-    const seen = new Set();
-    const items = [];
-    for (const el of cards) {
+    let changed = false;
+    for (const el of cardElements()) {
       let item;
       try {
         item = toItem(el);
       } catch (err) {
-        // Um único card malformado (href inválido, atributo ausente, etc.)
-        // não deve abortar a emissão inteira — pula e segue.
+        // Um card malformado não deve abortar a emissão — pula e segue.
         console.debug("[linkedin_search_parser] card ignorado:", err.message);
         continue;
       }
-      if (!item || !item.external_id || seen.has(item.external_id)) continue;
-      seen.add(item.external_id);
-      items.push(item);
+      if (!item) continue; // placeholder ocluso (sem título) ou sem id
+      const prev = accumulated.get(item.external_id);
+      if (!prev || fieldScore(item) > fieldScore(prev)) {
+        accumulated.set(item.external_id, item);
+        changed = true;
+      }
     }
-    send(items, readTotalAvailable());
+    const total = readTotalAvailable();
+    if (changed || total !== lastTotal) {
+      lastTotal = total;
+      send([...accumulated.values()], total);
+    }
   }
 
   // ---------- helpers ----------
 
-  // Localiza o <ul> de resultados: o <ul> dentro de <main> com mais filhos
-  // diretos do tipo <li id="ember…"> vence. Resistente a Ember IDs voláteis e
-  // à presença de outros <ul> (nav, recomendações etc.).
-  function findResultsList() {
-    const candidates = document.querySelectorAll("main ul");
+  // Os <li data-occludable-job-id> do <ul> com mais desses filhos diretos.
+  // Sinal estável (vs. classe ofuscada do <ul> ou ids "ember" voláteis).
+  function cardElements() {
     let best = null;
     let bestCount = 0;
-    for (const ul of candidates) {
-      const n = ul.querySelectorAll(':scope > li[id^="ember"]').length;
+    for (const ul of document.querySelectorAll("main ul")) {
+      const n = ul.querySelectorAll(":scope > li[data-occludable-job-id]").length;
       if (n > bestCount) {
         best = ul;
         bestCount = n;
       }
     }
-    return best;
+    if (best) return best.querySelectorAll(":scope > li[data-occludable-job-id]");
+    const within = document.querySelectorAll("main li[data-occludable-job-id]");
+    if (within.length) return within;
+    // Guest/deslogado: lista server-rendered sem data-occludable-job-id.
+    const guest = document.querySelectorAll("ul.jobs-search__results-list > li, li.base-card");
+    if (guest.length) return guest;
+    return document.querySelectorAll(SELECTORS.cardFallback);
   }
 
   function toItem(el) {
-    const externalId = extractExternalId(el);
-    const job_title = textOf(el, SELECTORS.title);
-    if (!job_title) return null;
+    const external_id = extractExternalId(el);
+    if (!external_id) return null;
+    const job_title = cleanTitle(el.querySelector(SELECTORS.title));
+    if (!job_title) return null; // card ocluso ainda não renderizado — ignora
     return {
-      external_id: externalId,
+      external_id,
       job_title,
-      company:  textOf(el, SELECTORS.company),
-      location: textOf(el, SELECTORS.location),
-      url:      linkOf(el),
+      company: cleanText(el.querySelector(SELECTORS.company)),
+      location: cleanText(el.querySelector(SELECTORS.location)),
+      // URL canônica a partir do id (o href vivo carrega um ?eBP=… gigante).
+      url: `${location.origin}/jobs/view/${external_id}/`,
     };
   }
 
   function extractExternalId(el) {
-    // Fontes, em ordem de confiabilidade:
-    //   1. data-occludable-job-id no próprio <li> (LinkedIn moderno, logado).
-    //   2. data-job-id no <li> ou em qualquer descendente.
-    //   3. /jobs/view/<id>/ extraído do anchor canônico.
-    // Nunca usar id="ember<N>" — é volátil entre renders.
+    // Ordem de confiabilidade (logado → guest). Nunca usar id="ember…".
+    // 1. data-occludable-job-id / data-job-id (logado, no <li> ou descendente).
     const direct =
-      el.getAttribute("data-occludable-job-id") ||
-      el.getAttribute("data-job-id");
+      el.getAttribute("data-occludable-job-id") || el.getAttribute("data-job-id");
     if (direct) return direct;
     const nested = el.querySelector("[data-occludable-job-id], [data-job-id]");
     if (nested) {
@@ -117,45 +142,55 @@
         nested.getAttribute("data-job-id")
       );
     }
-    const a = el.querySelector('a[href*="/jobs/view/"]');
-    if (a) {
-      const m = a.getAttribute("href").match(/\/jobs\/view\/(\d+)/);
-      if (m) return m[1];
+    // 2. data-entity-urn (guest, em div.base-card) → dígitos. Ex.:
+    //    "urn:li:jobPosting:4415550496".
+    const urnEl = el.matches("[data-entity-urn]")
+      ? el
+      : el.querySelector("[data-entity-urn]");
+    const urn = urnEl && urnEl.getAttribute("data-entity-urn");
+    if (urn) {
+      const digits = urn.replace(/\D/g, "");
+      if (digits) return digits;
     }
-    return null;
+    // 3. dígitos finais em /jobs/view/<id>/ ou /view/<slug>-<id> (guest).
+    const a = el.querySelector('a[href*="/jobs/view/"], a.base-card__full-link');
+    const href = a && a.getAttribute("href");
+    const m = href && href.match(/\/(?:jobs\/)?view\/(?:[^/?#]*?-)?(\d+)/);
+    return m ? m[1] : null;
+  }
+
+  // Quantos campos opcionais vieram preenchidos — usado para não regredir um
+  // card já bom quando um render parcial (sem empresa/local) reaparece.
+  function fieldScore(it) {
+    return (it.company ? 1 : 0) + (it.location ? 1 : 0);
+  }
+
+  // Texto limpo de um nó. Alguns layouts do LinkedIn duplicam o texto com
+  // <span aria-hidden="true">T</span><span class="visually-hidden">T</span>
+  // (textContent = "TT"); preferir a cópia aria-hidden evita a duplicação.
+  function cleanText(node) {
+    if (!node) return null;
+    const visible = node.querySelector('[aria-hidden="true"]');
+    const raw = (visible ? visible.textContent : node.textContent) || "";
+    return raw.replace(/\s+/g, " ").trim() || null;
+  }
+
+  // O título vem com o local embutido entre parênteses (texto de a11y):
+  // "Senior Product Design Manager ( São Paulo, Brasil)". O parêntese de local
+  // tem um espaço logo após "(" — distinto de um "(Backend)" de título real —,
+  // então removemos só esse sufixo. O local completo vem da caption.
+  function cleanTitle(node) {
+    const t = cleanText(node);
+    if (!t) return null;
+    return t.replace(/\s*\(\s[^)]*\)\s*$/, "").trim() || t;
   }
 
   function readTotalAvailable() {
-    // "1,234 results" / "32 vagas" — pegar primeiro inteiro do texto.
+    // "1,234 results" / "32 vagas" — primeiro inteiro do texto.
     const el = document.querySelector(SELECTORS.totalCount);
     if (!el) return null;
     const m = el.textContent.replace(/[.,]/g, "").match(/\d+/);
     return m ? parseInt(m[0], 10) : null;
-  }
-
-  function textOf(root, sel) {
-    const node = root.querySelector(sel);
-    return node ? node.textContent.replace(/\s+/g, " ").trim() : null;
-  }
-
-  function linkOf(root) {
-    // Prefere o anchor que aponta para /jobs/view/<id> (link canônico do card).
-    const direct = root.querySelector('a[href*="/jobs/view/"]');
-    const href = (direct || root.querySelector("a[href]"))?.getAttribute("href");
-    return safeAbsoluteUrl(href);
-  }
-
-  // `new URL()` lança em hrefs vazios, `#`, `javascript:void(0)` etc. — comuns
-  // em cards promocionais / footer da página de coleções. Devolve null no lugar.
-  function safeAbsoluteUrl(href) {
-    if (!href) return null;
-    const trimmed = href.trim();
-    if (!trimmed || trimmed === "#" || trimmed.startsWith("javascript:")) return null;
-    try {
-      return new URL(trimmed, location.origin).href;
-    } catch (_) {
-      return null;
-    }
   }
 
   function send(items, totalAvailable) {
@@ -173,8 +208,8 @@
     try {
       chrome.runtime.sendMessage(msg);
     } catch (err) {
-      // Race entre extensionAlive() e sendMessage: o runtime pode cair entre
-      // o guard e a chamada. Desliga o observer e segue silencioso.
+      // Race entre extensionAlive() e sendMessage: o runtime pode cair entre o
+      // guard e a chamada. Desliga o observer e segue silencioso.
       if (/Extension context invalidated/i.test(err.message)) {
         disconnectAndStop();
       } else {
@@ -184,8 +219,8 @@
   }
 
   function extensionAlive() {
-    // chrome.runtime.id vira undefined após a extensão ser recarregada — é o
-    // sinal canônico para detectar contexto inválido em content scripts MV3.
+    // chrome.runtime.id vira undefined após a extensão ser recarregada — sinal
+    // canônico de contexto inválido em content scripts MV3.
     return typeof chrome !== "undefined" && !!chrome.runtime && !!chrome.runtime.id;
   }
 
