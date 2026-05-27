@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LinkedInJobCard",
+  "type": "object",
+  "required": ["title", "url"],
+  "properties": {
+    "external_id": { "type": "string", "description": "ID numérico da vaga (jobPosting) extraído do card" },
+    "title":       { "type": "string", "description": "Título da vaga" },
+    "company":     { "type": "string", "description": "Nome da empresa" },
+    "location":    { "type": "string", "description": "Localização crua do card (ex: 'São Paulo, Brazil')" },
+    "url":         { "type": "string", "description": "URL canônica da vaga (/jobs/view/NNN)" },
+    "posted_raw":  { "type": "string", "description": "Data de publicação crua (ex: '2 days ago' ou ISO via datetime attr)" },
+    "source_view": { "type": "string", "enum": ["guest", "loggedin"], "description": "DOM de origem: guest (deslogado) ou loggedin (SPA Ember)" }
+  }
+}

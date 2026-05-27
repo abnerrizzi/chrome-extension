@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Modular DOM Counter",
-  "version": "0.3.7",
+  "version": "0.4.1",
   "description": "Conta itens relevantes em páginas suportadas (estilo AdBlock) e envia o payload normalizado para a API local.",
   "permissions": [
     "activeTab",
@@ -12,7 +12,8 @@
   ],
   "host_permissions": [
     "*://*.olx.com.br/*",
-    "*://*.auctions.example/*"
+    "*://*.auctions.example/*",
+    "*://*.linkedin.com/*"
   ],
   "optional_host_permissions": [
     "http://*/*",
@@ -48,6 +49,10 @@
     {
       "resources": ["parsers/auctions_parser.js"],
       "matches": ["*://*.auctions.example/*"]
+    },
+    {
+      "resources": ["parsers/linkedin_parser.js"],
+      "matches": ["*://*.linkedin.com/*"]
     }
   ]
 }

@@ -110,3 +110,139 @@ def test_olx_house_payload_full_normalization():
     assert out["area_m2"] == 230
     assert out["listing_kind"] == "Casa À venda"
     assert out["posted_at"] is not None and "T" in out["posted_at"]
+
+
+def test_linkedin_missing_required_returns_422():
+    payload = {"domain_id": "linkedin", "raw_data": {"items": [{"company": "ACME"}]}}
+    r = client.post("/api/v1/ingest", json=payload)
+    assert r.status_code == 422
+
+
+def test_linkedin_list_normalization():
+    payload = {
+        "domain_id": "linkedin",
+        "raw_data": {
+            "items": [{
+                "external_id": "3801234567",
+                "title": "  Senior Backend Engineer ",
+                "company": " ACME Corp ",
+                "location": "São Paulo, Brazil",
+                "url": "https://www.linkedin.com/jobs/view/3801234567/",
+                "posted_raw": "2024-05-09",
+                "source_view": "loggedin",
+            }],
+        },
+    }
+    r = client.post("/api/v1/ingest", json=payload)
+    assert r.status_code == 200, r.text
+    out = r.json()["normalized"][0]
+    assert out["external_id"] == "3801234567"
+    assert out["title"] == "Senior Backend Engineer"
+    assert out["company"] == "ACME Corp"
+    assert out["posted_at"] == "2024-05-09"
+    assert out["source_view"] == "loggedin"
+
+
+def test_linkedin_detail_normalization():
+    payload = {
+        "domain_id": "linkedin_detail",
+        "raw_data": {
+            "items": [{
+                "external_id": "3801234567",
+                "title": "Senior Backend Engineer",
+                "url": "https://www.linkedin.com/jobs/view/3801234567/",
+                "description": "  We are hiring backend engineers.  ",
+                "seniority": "Mid-Senior level",
+                "employment_type": "Full-time",
+                "applicants_raw": "Over 1,200 applicants",
+                "source_view": "loggedin",
+            }],
+        },
+    }
+    r = client.post("/api/v1/ingest", json=payload)
+    assert r.status_code == 200, r.text
+    out = r.json()["normalized"][0]
+    assert out["applicants"] == 1200
+    assert out["seniority"] == "Mid-Senior level"
+    assert out["employment_type"] == "Full-time"
+    assert out["description"] == "We are hiring backend engineers."
+
+
+def test_linkedin_external_id_upsert_dedupes():
+    """Mesmo external_id em ingests separados não duplica a vaga."""
+    from app.core import db
+
+    eid = "ln-test-dedup-9999999"
+    payload = {
+        "domain_id": "linkedin",
+        "raw_data": {
+            "items": [{
+                "external_id": eid,
+                "title": "Dedup Engineer",
+                "url": f"https://www.linkedin.com/jobs/view/{eid}/",
+                "company": "ACME",
+            }],
+        },
+    }
+    r1 = client.post("/api/v1/ingest", json=payload)
+    r2 = client.post("/api/v1/ingest", json=payload)
+    assert r1.status_code == 200 and r2.status_code == 200
+
+    if not r1.json().get("persisted"):
+        return  # DB sem migrações — skip assert do banco
+
+    with db.connect() as conn:
+        with db.cursor(conn) as cur:
+            cur.execute(db.q("SELECT count(*) FROM linkedin_jobs WHERE external_id=?"), (eid,))
+            assert cur.fetchone()[0] == 1
+            cur.execute(db.q("DELETE FROM linkedin_jobs WHERE external_id=?"), (eid,))
+
+
+def test_linkedin_list_detail_join_by_external_id():
+    """Lista e detalhe vivem em tabelas separadas, unidas pelo external_id."""
+    from app.core import db
+
+    eid = "ln-join-9999998"
+    list_payload = {
+        "domain_id": "linkedin",
+        "raw_data": {"items": [{
+            "external_id": eid,
+            "title": "Join Engineer",
+            "company": "ACME",
+            "location": "Remote",
+            "url": f"https://www.linkedin.com/jobs/view/{eid}/",
+        }]},
+    }
+    detail_payload = {
+        "domain_id": "linkedin_detail",
+        "raw_data": {"items": [{
+            "external_id": eid,
+            "title": "Join Engineer",
+            "url": f"https://www.linkedin.com/jobs/view/{eid}/",
+            "description": "Joins two tables by id.",
+            "seniority": "Mid-Senior level",
+            "employment_type": "Full-time",
+        }]},
+    }
+    r1 = client.post("/api/v1/ingest", json=list_payload)
+    r2 = client.post("/api/v1/ingest", json=detail_payload)
+    assert r1.status_code == 200 and r2.status_code == 200
+
+    if not (r1.json().get("persisted") and r2.json().get("persisted")):
+        return  # DB sem migrações — skip assert do banco
+
+    with db.connect() as conn:
+        with db.cursor(conn) as cur:
+            cur.execute(db.q(
+                "SELECT j.title, d.description, d.seniority "
+                "FROM linkedin_jobs j JOIN linkedin_job_details d "
+                "  ON j.external_id = d.external_id "
+                "WHERE j.external_id=?"
+            ), (eid,))
+            row = cur.fetchone()
+            assert row is not None, "join lista×detalhe não retornou linha"
+            assert row[0] == "Join Engineer"
+            assert row[1] == "Joins two tables by id."
+            assert row[2] == "Mid-Senior level"
+            cur.execute(db.q("DELETE FROM linkedin_jobs WHERE external_id=?"), (eid,))
+            cur.execute(db.q("DELETE FROM linkedin_job_details WHERE external_id=?"), (eid,))

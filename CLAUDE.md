@@ -91,7 +91,16 @@ Fixture para desenvolvimento: `tmp/olx_next_data.json` (untracked) — um `__NEX
 
 OLX is behind Cloudflare; plain `curl` returns a CAPTCHA page. Use the curl-impersonate Docker image (TLS fingerprint of Chrome 110) — the Makefile already wires this.
 
-> **LinkedIn module removed.** A previous LinkedIn jobs module (search + detail parsers) was stripped out (`chore: remove módulo linkedin`) to be rebuilt from scratch. When re-adding it, follow the **"Adding a new domain"** five-file lockstep above. Historical context: LinkedIn is an Ember SPA (no `__NEXT_DATA__`) whose logged-in jobs list is virtualized (only ~7 cards rendered at a time, `li[data-occludable-job-id]`), so a parser must accumulate across scroll rather than snapshot once; the reference Selenium scraper lives at `jobhubmine/scrapers/linkedin-ff-selenium`.
+## LinkedIn specifics
+
+LinkedIn is an Ember SPA — **no `__NEXT_DATA__`**, so `extension/parsers/linkedin_parser.js` is fully DOM-driven. It auto-detects **two DOMs** at runtime and serves **two page types**:
+
+- **Guest** (logged-out, `/jobs/search/`): server-rendered list `ul.jobs-search__results-list > div.base-card`; detail page `/jobs/view/NNN` (`div.show-more-less-html__markup`, `li.description__job-criteria-item`). These selectors are confirmed against a real capture.
+- **Logged-in** (the common case): the jobs list is **virtualized** (~7 `li[data-occludable-job-id]` cards in the DOM at a time) and a job opens in a **side detail pane** (URL gains `?currentJobId=NNN`). The logged-in selectors in `SEL.LOGGEDIN` are **best-effort and flagged UNVERIFIED** — every field degrades to `null` (never throws); validate/correct them against a real logged-in capture (epic story ST-021).
+
+Because the logged-in list is virtualized, the parser **accumulates across the user's scroll** rather than snapshotting once: a `Map` deduped by job id (kept on `window.__linkedinParserState` so it survives the `executeScript` re-injections that `pushState` triggers — a full reload starts fresh), grown by a debounced `MutationObserver`, re-emitting the full array each fire.
+
+It emits **two domains** from one parser: `linkedin` (list cards → table `linkedin_jobs`) and `linkedin_detail` (the open job → `linkedin_job_details`), joined by `external_id` (the numeric jobPosting id). `background.js` keeps the detail payload in a separate `tab:<id>:detail` slot so it never clobbers the list badge/preview. The reference logged-out Selenium scraper lives at `jobhubmine/scrapers/linkedin-ff-selenium` (guest selectors only).
 
 ## Make pipeline (mirrors the extension)
 
@@ -109,7 +118,9 @@ make session-<N> → GET /api/v1/sessions/<N>  (detail with items)
 
 `scripts/extract_olx.py` **mirrors `extension/parsers/olx_parser.js` line-by-line**: same path (`props.pageProps.ads`), same field mapping, same `kindFromRealEstateType` derivation, same `isVendaOuAluguel` filter (venda + aluguel only). Keep them in sync when changing parser logic. `scripts/dump_next_data.py` is the smaller utility that just yanks the JSON out of the HTML.
 
-`URL=…` env var overrides the default search; `API=…` overrides `http://localhost:8000`.
+There's a parallel **LinkedIn pipeline** (`make linkedin-fetch → linkedin-extract → linkedin-ingest`, chained by `make linkedin-run`). It targets the **guest** experience only — `curl` can't be logged in — so it fetches the public `jobs-guest/jobs/api/seeMoreJobPostings/search` fragment (default `LI_URL`, overridable) via the same curl-impersonate image. `scripts/extract_linkedin.py` parses that HTML with stdlib `html.parser` and **mirrors the guest branch (`SEL.GUEST.list`) of `linkedin_parser.js`** — same fields (`external_id, title, company, location, url, posted_raw`, `source_view="guest"`), same tolerant keep filter. It can't exercise the logged-in/virtualized or detail paths (those need a browser session). Keep it in sync with the parser's guest selectors.
+
+`URL=…` (OLX) / `LI_URL=…` (LinkedIn) override the default search; `API=…` overrides `http://localhost:8000`.
 
 ## Database conventions
 

@@ -15,6 +15,12 @@ PAYLOAD     := $(OUT_DIR)/olx_payload.json
 IMPERSONATE := lwthiker/curl-impersonate:0.5-chrome
 BROWSER     := curl_chrome110
 
+# LinkedIn (vagas, experiência GUEST — curl não loga). Sobrescreva LI_URL para
+# mudar a busca; o fragmento da API guest devolve só os cards (fácil de parsear).
+LI_URL      ?= https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=software%20engineer&location=Brazil&start=0
+LI_HTML     := $(OUT_DIR)/linkedin_live.html
+LI_PAYLOAD  := $(OUT_DIR)/linkedin_payload.json
+
 .DEFAULT_GOAL := help
 
 help:  ## mostra os targets disponíveis
@@ -45,6 +51,24 @@ ingest: $(PAYLOAD)  ## envia o payload extraído para a API e formata o resultad
 
 run: fetch extract ingest  ## pipeline completo: fetch → extract → ingest
 
+linkedin-fetch: | $(OUT_DIR)  ## baixa vagas do LinkedIn guest via curl-impersonate (LI_URL=...)
+	@echo "→ fetch  $(LI_URL)"
+	@docker run --rm -v "$(CURDIR)/$(OUT_DIR):/out" $(IMPERSONATE) \
+		$(BROWSER) -sL -o /out/$(notdir $(LI_HTML)) \
+		-w 'http=%{http_code} size=%{size_download}\n' "$(LI_URL)"
+	@grep -q 'base-card' $(LI_HTML) || (echo "✘ base-card ausente — LinkedIn bloqueou ou layout mudou"; exit 1)
+
+linkedin-extract: $(LI_HTML)  ## extrai vagas do HTML guest (espelha SEL.GUEST do parser JS)
+	@python3 scripts/extract_linkedin.py $(LI_HTML) $(LI_PAYLOAD)
+
+linkedin-ingest: $(LI_PAYLOAD)  ## envia o payload de vagas para a API
+	@echo "→ POST   $(API)/api/v1/ingest"
+	@curl -sS -X POST $(API)/api/v1/ingest \
+		-H 'Content-Type: application/json' \
+		--data @$(LI_PAYLOAD) | python3 -m json.tool
+
+linkedin-run: linkedin-fetch linkedin-extract linkedin-ingest  ## pipeline LinkedIn: fetch → extract → ingest
+
 sessions:  ## lista as últimas sessões persistidas
 	@curl -sS $(API)/api/v1/sessions?limit=10 | python3 -m json.tool
 
@@ -52,8 +76,8 @@ session-%:  ## detalha uma sessão (uso: make session-25)
 	@curl -sS $(API)/api/v1/sessions/$* | python3 -m json.tool
 
 clean:  ## limpa artefatos intermediários
-	@rm -rf $(HTML) $(RAW) $(PAYLOAD)
-	@echo "✓ tmp/olx_*.{html,json} removidos"
+	@rm -rf $(HTML) $(RAW) $(PAYLOAD) $(LI_HTML) $(LI_PAYLOAD)
+	@echo "✓ tmp/{olx,linkedin}_* removidos"
 
 up-postgres:  ## sobe stack Postgres (db + liquibase update + api)
 	@docker compose --profile postgres up -d db
@@ -68,4 +92,4 @@ up-sqlite:  ## sobe stack SQLite (liquibase-sqlite update + api)
 down:  ## para todos os serviços de todos os perfis
 	@docker compose --profile postgres --profile sqlite down
 
-.PHONY: help fetch raw extract ingest run sessions clean up-postgres up-sqlite down
+.PHONY: help fetch raw extract ingest run linkedin-fetch linkedin-extract linkedin-ingest linkedin-run sessions clean up-postgres up-sqlite down

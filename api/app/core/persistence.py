@@ -105,6 +105,43 @@ def _insert_items(cur, domain_id: str, session_id: int, items: list[dict]) -> No
                 ),
                 rows,
             )
+    elif domain_id == "linkedin":
+        cur.executemany(
+            db.q(
+                "INSERT INTO linkedin_jobs "
+                "(session_id, external_id, title, company, location, url, "
+                " posted_at, source_view) "
+                "VALUES (?,?,?,?,?,?,?,?) "
+                f"{on_conflict} "
+                "  session_id=EXCLUDED.session_id, title=EXCLUDED.title, "
+                "  company=EXCLUDED.company, location=EXCLUDED.location, url=EXCLUDED.url, "
+                "  posted_at=EXCLUDED.posted_at, source_view=EXCLUDED.source_view"
+            ),
+            [(session_id, it.get("external_id"), it["title"], it.get("company"),
+              it.get("location"), it["url"], it.get("posted_at"), it.get("source_view"))
+             for it in items],
+        )
+    elif domain_id == "linkedin_detail":
+        # O detalhe enriquece a linha da lista pelo mesmo external_id (upsert):
+        # descrição, senioridade, regime e nº de candidaturas chegam aqui.
+        cur.executemany(
+            db.q(
+                "INSERT INTO linkedin_job_details "
+                "(session_id, external_id, title, company, location, url, "
+                " description, seniority, employment_type, applicants, source_view) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?) "
+                f"{on_conflict} "
+                "  session_id=EXCLUDED.session_id, title=EXCLUDED.title, "
+                "  company=EXCLUDED.company, location=EXCLUDED.location, url=EXCLUDED.url, "
+                "  description=EXCLUDED.description, seniority=EXCLUDED.seniority, "
+                "  employment_type=EXCLUDED.employment_type, applicants=EXCLUDED.applicants, "
+                "  source_view=EXCLUDED.source_view"
+            ),
+            [(session_id, it.get("external_id"), it["title"], it.get("company"),
+              it.get("location"), it["url"], it.get("description"), it.get("seniority"),
+              it.get("employment_type"), it.get("applicants"), it.get("source_view"))
+             for it in items],
+        )
 
 
 def fetch_recent_sessions(limit: int = 20) -> list[dict]:
@@ -139,6 +176,8 @@ def fetch_session_items(session_id: int) -> dict:
     table_map = {
         "olx": "olx_listings",
         "auctions": "auction_items",
+        "linkedin": "linkedin_jobs",
+        "linkedin_detail": "linkedin_job_details",
     }
     try:
         with db.connect() as conn:

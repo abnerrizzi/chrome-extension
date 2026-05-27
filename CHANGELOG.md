@@ -23,6 +23,22 @@ Liquibase changeset id (e.g. `olx-004`).
 - `./scripts/tag_release.sh --backend postgres|sqlite` (default `postgres`).
 - `api/tests/test_db_dialect.py` cobrindo detecção de backend, reescrita de
   placeholders e cláusula de upsert.
+- **Módulo LinkedIn (vagas)** — parser único `extension/parsers/linkedin_parser.js`
+  que detecta em runtime o DOM **guest** (deslogado) ou **logado** (SPA Ember) e o
+  tipo de página (lista × detalhe). A lista virtualizada é **acumulada por scroll**
+  (Map dedupado por id) via `MutationObserver`. Emite dois domínios: `linkedin`
+  (cards → tabela `linkedin_jobs`) e `linkedin_detail` (vaga aberta →
+  `linkedin_job_details`), unidos pelo `external_id` (id do jobPosting).
+- Schemas `api/app/schemas/linkedin.json` + `linkedin_detail.json` e normalizers
+  `api/app/normalization/linkedin.py` (`normalize_list` / `normalize_detail`).
+- `db/changelog{,-sqlite}/modules/linkedin.sql` — tabelas `linkedin_jobs` e
+  `linkedin_job_details` com índice único parcial em `external_id` (changesets
+  `linkedin-001`..`linkedin-004`).
+- Skill `/epic-sync` — registra Epics/Stories do plano no `epic/todo.md` **antes**
+  da implementação e mantém o arquivo em sincronia durante a execução.
+- Pipeline `make linkedin-run` (fetch → extract → ingest) espelhando o da OLX,
+  para o DOM **guest** do LinkedIn; `scripts/extract_linkedin.py` parseia o HTML
+  guest (stdlib `html.parser`) com os mesmos campos do ramo `SEL.GUEST` do parser.
 
 ### Changed
 - `api/app/core/persistence.py` reescrito sobre o shim — SQL agora usa `?` e
@@ -30,6 +46,9 @@ Liquibase changeset id (e.g. `olx-004`).
 - `api/tests/test_ingest_dynamic.py` faz cleanup via `db.connect()`/`db.q()`
   em vez de `psycopg` direto, rodando contra qualquer backend.
 - `README.md` e `CLAUDE.md` documentam a seleção dual-backend.
+- `extension/background.js` — domínios `*_detail` gravam em `tab:<id>:detail`
+  (slot separado), não alteram o badge e têm dedupe de auto-send por domínio; o
+  cleanup ao fechar a aba remove todas as chaves `tab:<id>*`.
 
 ## [0.3.7] — 2026-05-27
 
