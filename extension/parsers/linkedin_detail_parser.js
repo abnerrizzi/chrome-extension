@@ -35,6 +35,14 @@
     { rx: /\bexecutive\b|\bexecutivo\b/i,            v: "Executive" },
     { rx: /\binternship\b|\bestágio\b/i,             v: "Internship" },
   ];
+  const EMPLOYMENT_KEYWORDS = [
+    { rx: /\bfull[- ]?time\b|\btempo integral\b/i,   v: "Full-time" },
+    { rx: /\bpart[- ]?time\b|\bmeio per[íi]odo\b/i,  v: "Part-time" },
+    { rx: /\bcontract\b|\bcontrato\b|\bpj\b/i,       v: "Contract" },
+    { rx: /\btemporary\b|\btempor[áa]rio\b/i,        v: "Temporary" },
+    { rx: /\binternship\b|\best[áa]gio\b/i,          v: "Internship" },
+    { rx: /\bvolunteer\b|\bvolunt[áa]rio\b/i,        v: "Volunteer" },
+  ];
 
   // chrome.runtime.id vira undefined depois que a extensão é recarregada.
   // O MutationObserver continua vivo na página até o navegador derrubar o frame,
@@ -69,17 +77,27 @@
       return;
     }
     const chips = collectChips();
+    const criteria = readCriteria();
+    const crit = (needle) => {
+      const key = Object.keys(criteria).find((lbl) => lbl.includes(needle));
+      return key ? criteria[key] : null;
+    };
     const item = {
-      external_id:    externalId,
+      external_id:     externalId,
       job_title,
-      company:        textOf(document, SELECTORS.company),
-      location:       textOf(document, SELECTORS.locationLine),
-      url:            canonicalUrl(externalId),
-      description:    textOf(document, SELECTORS.description),
-      seniority:      matchKeyword(chips, SENIORITY_KEYWORDS),
-      workplace_type: matchKeyword(chips, WORKPLACE_KEYWORDS),
-      posted_at:      readPostedAt(),
-      skills:         readSkills(),
+      company:         textOf(document, SELECTORS.company),
+      location:        textOf(document, SELECTORS.locationLine),
+      url:             canonicalUrl(externalId),
+      description:     textOf(document, SELECTORS.description),
+      // Critério estruturado (guest) tem prioridade; chips+keyword é fallback.
+      seniority:       crit("seniority") || matchKeyword(chips, SENIORITY_KEYWORDS),
+      workplace_type:  matchKeyword(chips, WORKPLACE_KEYWORDS),
+      employment_type: crit("employment") || matchKeyword(chips, EMPLOYMENT_KEYWORDS),
+      job_function:    crit("job function") || crit("função"),
+      industries:      crit("industries") || crit("setor"),
+      posted_at:       readPostedAt(),
+      raw_json:        buildRawJson(criteria, chips),
+      skills:          readSkills(),
     };
     send([item]);
   }
@@ -106,6 +124,46 @@
     return Array.from(document.querySelectorAll(SELECTORS.insightChip))
       .map((el) => el.textContent.replace(/\s+/g, " ").trim())
       .filter(Boolean);
+  }
+
+  // Lista de critérios "About the job" → mapa {label: value} com label em
+  // minúsculas. Guest: <li class="description__job-criteria-item"><h3>label</h3>
+  // <span>value</span></li> (regra portada do scraper Selenium de referência).
+  function readCriteria() {
+    const map = {};
+    const items = document.querySelectorAll(
+      "li.description__job-criteria-item, .description__job-criteria-list li"
+    );
+    for (const li of items) {
+      const labelEl = li.querySelector("h3, .description__job-criteria-subheader");
+      const valueEl = li.querySelector("span, .description__job-criteria-text");
+      if (!labelEl || !valueEl) continue;
+      const label = labelEl.textContent.replace(/\s+/g, " ").trim().toLowerCase();
+      const value = valueEl.textContent.replace(/\s+/g, " ").trim();
+      if (label && value) map[label] = value;
+    }
+    return map;
+  }
+
+  // Catch-all `raw_json`: tudo que foi capturado do detalhe (critérios + chips +
+  // candidatos/salário quando presentes), serializado. A description NÃO entra
+  // (já tem coluna própria). Devolve string JSON ou null.
+  function buildRawJson(criteria, chips) {
+    const payload = {};
+    if (Object.keys(criteria).length) payload.criteria = criteria;
+    if (chips.length) payload.chips = chips;
+    const applicants = textOf(
+      document,
+      ".jobs-unified-top-card__applicant-count, .num-applicants__caption, " +
+        ".jobs-unified-top-card__subtitle-secondary-grouping span"
+    );
+    if (applicants) payload.applicants = applicants;
+    const salary = textOf(
+      document,
+      ".jobs-details__salary-main-rail-card, .compensation__salary, .salary"
+    );
+    if (salary) payload.salary = salary;
+    return Object.keys(payload).length ? JSON.stringify(payload) : null;
   }
 
   function matchKeyword(chips, table) {
