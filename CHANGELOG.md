@@ -31,6 +31,20 @@ Liquibase changeset id (e.g. `olx-004`).
   em vez de `psycopg` direto, rodando contra qualquer backend.
 - `README.md` e `CLAUDE.md` documentam a seleção dual-backend.
 
+## [0.3.5] — 2026-05-27
+
+### Fixed
+- **Parser de busca do LinkedIn captura todas as vagas, não só ~7.** A lista é
+  virtualizada: o `<ul>` tem um `<li data-occludable-job-id>` por vaga (todos),
+  mas só ~7 perto do viewport têm o conteúdo renderizado (`occludable-update`).
+  O parser agora seleciona pelos `<li data-occludable-job-id>` (a classe do
+  `<ul>` é ofuscada), extrai título/empresa/local do `artdeco-entity-lockup` e
+  **acumula por `external_id` entre execuções** — conforme o usuário rola, o
+  `MutationObserver` dispara e a união cresce até `totalAvailable`. O título vem
+  com o local entre parênteses (a11y); o sufixo `( … )` é removido. URL canônica
+  montada a partir do id. Re-POST da união é idempotente (upsert por
+  `external_id`).
+
 ## [0.3.4] — 2026-05-26
 
 ### Fixed
