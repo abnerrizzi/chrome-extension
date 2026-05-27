@@ -3,32 +3,6 @@
 
 const DOMAIN_REGISTRY = [
   {
-    // Lista de busca: cards rasos com data-job-id.
-    id: "linkedin-search",
-    js: ["parsers/linkedin_search_parser.js"],
-    matches: [
-      "*://*.linkedin.com/jobs/search/*",
-      "*://*.linkedin.com/jobs/search*",
-      "*://*.linkedin.com/jobs/collections/*",
-      "*://*.linkedin.com/jobs/",
-    ],
-    allFrames: false,
-    runAt: "document_idle",
-  },
-  {
-    // Detalhe: enriquece a linha via upsert por external_id.
-    // /jobs/view/<id> e o painel direito em /jobs/search/?currentJobId=<id>.
-    id: "linkedin-detail",
-    js: ["parsers/linkedin_detail_parser.js"],
-    matches: [
-      "*://*.linkedin.com/jobs/view/*",
-      "*://*.linkedin.com/jobs/search/*",
-      "*://*.linkedin.com/jobs/search*",
-    ],
-    allFrames: false,
-    runAt: "document_idle",
-  },
-  {
     id: "olx",
     js: ["parsers/olx_parser.js"],
     matches: ["*://*.olx.com.br/*"],
@@ -45,8 +19,8 @@ const DOMAIN_REGISTRY = [
 ];
 
 // Reconcile o registro de content scripts com DOMAIN_REGISTRY:
-//   1. Remove órfãos (IDs que existem no Chrome mas saíram do registry — ex.:
-//      "linkedin" depois do split em search/detail).
+//   1. Remove órfãos (IDs registrados no Chrome que saíram do DOMAIN_REGISTRY,
+//      ex.: um parser removido ou renomeado).
 //   2. Atualiza IDs que já existem (cobre mudanças de `matches` / `js` entre
 //      versões sem trocar o ID).
 //   3. Registra IDs novos.
@@ -150,7 +124,7 @@ function payloadHash(domain, items) {
   return `${domain}|${ids}`;
 }
 
-async function autoSendIfEnabled(tabId, domain, items, hashKeySuffix = "lastSentHash") {
+async function autoSendIfEnabled(tabId, domain, items) {
   if (!Array.isArray(items) || items.length === 0) return;
   const { autoSend, apiUrl } = await chrome.storage.sync.get({
     autoSend: false,
@@ -159,9 +133,7 @@ async function autoSendIfEnabled(tabId, domain, items, hashKeySuffix = "lastSent
   if (!autoSend) return;
 
   const hash = payloadHash(domain, items);
-  // Canais separados (lista vs. detalhe) usam chaves de dedupe distintas para
-  // não thrashar um ao outro quando ambos rodam na mesma aba.
-  const lastKey = `tab:${tabId}:${hashKeySuffix}`;
+  const lastKey = `tab:${tabId}:lastSentHash`;
   const last = (await chrome.storage.session.get(lastKey))[lastKey];
   if (last === hash) return; // dedupe — já enviado este snapshot
 
@@ -183,21 +155,6 @@ async function autoSendIfEnabled(tabId, domain, items, hashKeySuffix = "lastSent
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || msg.type !== "DOM_COUNT") return false;
   const tabId = sender.tab && sender.tab.id;
-
-  // Canal de enriquecimento (parser de detalhe): só faz upsert no backend.
-  // NÃO mexe no badge nem no payload `tab:<id>` — senão a vaga única com
-  // description sobrescreve a lista na popup/badge quando os dois parsers
-  // rodam juntos em /jobs/search/?currentJobId=. A lista manda no display.
-  if (msg.kind === "detail") {
-    if (tabId) {
-      autoSendIfEnabled(tabId, msg.domain, msg.items || [], "lastDetailHash").catch(
-        (err) => console.error("autoSend(detail)", err),
-      );
-    }
-    sendResponse({ ok: true });
-    return true;
-  }
-
   setBadge(tabId, msg.count).catch((err) => console.error("setBadge", err));
 
   // Persiste o último payload por aba para o popup recuperar.
@@ -209,9 +166,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       items: msg.items || [],
       capturedAt: Date.now(),
     };
-    // Metadata opcional: total de resultados disponíveis na página
-    // (ex.: LinkedIn mostra "1.234 vagas"). Útil para popup exibir
-    // "mostrando N de TOTAL".
+    // Metadata opcional: total de resultados disponíveis na página, quando o
+    // parser informa. Útil para o popup exibir "mostrando N de TOTAL".
     if (typeof msg.totalAvailable === "number") stored.totalAvailable = msg.totalAvailable;
     chrome.storage.session.set({ [key]: stored });
     autoSendIfEnabled(tabId, msg.domain, msg.items || []).catch((err) =>
@@ -224,7 +180,5 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 // Limpa storage da aba quando ela é fechada (o badge é zerado automaticamente pelo Chromium).
 chrome.tabs.onRemoved.addListener((tabId) => {
-  chrome.storage.session
-    .remove([`tab:${tabId}`, `tab:${tabId}:lastSentHash`, `tab:${tabId}:lastDetailHash`])
-    .catch(() => {});
+  chrome.storage.session.remove([`tab:${tabId}`, `tab:${tabId}:lastSentHash`]).catch(() => {});
 });

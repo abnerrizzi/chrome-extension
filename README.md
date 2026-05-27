@@ -4,7 +4,7 @@ Ecossistema ponta-a-ponta para extrair, validar e persistir dados de páginas we
 
 - **Chrome Extension (MV3)** — content scripts dinâmicos por domínio. No OLX, lê `__NEXT_DATA__` (não o DOM renderizado) e mostra contagem no badge estilo AdBlock. Popup em visual terminal.
 - **API (FastAPI + Pydantic v2)** — `POST /api/v1/ingest` valida com modelo Pydantic **gerado em runtime** a partir do JSON Schema do domínio, normaliza (preço → cents, datas → ISO-8601) e faz upsert no banco por `external_id`.
-- **PostgreSQL ou SQLite + Liquibase** — backend escolhido pelo scheme do `DATABASE_URL` (`postgresql://…` ou `sqlite:///…`). Changelogs em SQL formatado, modulares por domínio (`core`, `linkedin`, `olx`, `auctions`), com `<rollback>` e `<preCondition>` por changeset, **espelhados** em `db/changelog/` (Postgres) e `db/changelog-sqlite/` (SQLite).
+- **PostgreSQL ou SQLite + Liquibase** — backend escolhido pelo scheme do `DATABASE_URL` (`postgresql://…` ou `sqlite:///…`). Changelogs em SQL formatado, modulares por domínio (`core`, `olx`, `auctions`), com `<rollback>` e `<preCondition>` por changeset, **espelhados** em `db/changelog/` (Postgres) e `db/changelog-sqlite/` (SQLite).
 - **Makefile** — pipeline CLI que espelha exatamente a extensão (`fetch` → `extract` → `ingest`), útil pra testar sem abrir o Chrome.
 
 Tudo (exceto o navegador) roda em containers via `docker compose`. Sem nenhum Python/Postgres/SQLite/Liquibase instalado no host.

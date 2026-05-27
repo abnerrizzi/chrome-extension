@@ -10,13 +10,11 @@ from app.core import persistence
 from app.core.dynamic_validator import build_item_model
 from app.core.schema_registry import SchemaNotFoundError, get_schema, list_domains
 from app.normalization import auctions as norm_auctions
-from app.normalization import linkedin as norm_linkedin
 from app.normalization import olx as norm_olx
 
 router = APIRouter(tags=["ingest"])
 
 NORMALIZERS = {
-    "linkedin": norm_linkedin.normalize,
     "olx": norm_olx.normalize,
     "auctions": norm_auctions.normalize,
 }

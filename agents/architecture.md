@@ -121,7 +121,7 @@ README.
 
 Key file:line anchors:
 
-- Parser → SW message: `chrome.runtime.sendMessage({type:"DOM_COUNT", domain, count, items})` (see `extension/parsers/olx_parser.js:65` and `linkedin_parser.js:14`).
+- Parser → SW message: `chrome.runtime.sendMessage({type:"DOM_COUNT", domain, count, items})` (see `extension/parsers/olx_parser.js:65`).
 - Badge dispatch: `setBadge` at `extension/background.js:75`.
 - Auto-send with per-tab dedup hash: `autoSendIfEnabled` at `extension/background.js:95`.
 - Ingest pipeline: `process_items` at `api/app/routers/ingest.py:35`.

@@ -62,13 +62,6 @@ async function pingApi(base) {
 }
 
 function previewFields(domain, item) {
-  if (domain === "linkedin") {
-    return {
-      title: item.job_title || item.title || "",
-      price: item.company || "",
-      meta:  shortenUrl(item.url),
-    };
-  }
   if (domain === "auctions") {
     return {
       title: item.title || "",

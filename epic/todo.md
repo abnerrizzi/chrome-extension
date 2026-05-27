@@ -10,7 +10,7 @@
 
 ## EPIC-002 — Lógica Modular Desacoplada dos Extractors
 - [x] ST-005 Motor Dinâmico de Modulação Injetada (Content Scripts Orchestrator)
-- [x] ST-006 Módulo LinkedIn de Extrações Profissionais
+- [ ] ST-006 Módulo LinkedIn de Extrações Profissionais — **removido; a reconstruir do zero**
 - [x] ST-007 Módulo OLX Classificados
 - [x] ST-007b Módulo Auctions (extensão lógica do EPIC-002)
 - [x] ST-007c Refinamento OLX (kind venda/aluguel, neighbourhood, observabilidade __NEXT_DATA__)

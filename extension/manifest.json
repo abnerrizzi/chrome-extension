@@ -12,7 +12,6 @@
   ],
   "host_permissions": [
     "*://*.olx.com.br/*",
-    "*://*.linkedin.com/*",
     "*://*.auctions.example/*"
   ],
   "optional_host_permissions": [
@@ -42,14 +41,6 @@
     "128": "icons/icon128.png"
   },
   "web_accessible_resources": [
-    {
-      "resources": ["parsers/linkedin_search_parser.js"],
-      "matches": ["*://*.linkedin.com/*"]
-    },
-    {
-      "resources": ["parsers/linkedin_detail_parser.js"],
-      "matches": ["*://*.linkedin.com/*"]
-    },
     {
       "resources": ["parsers/olx_parser.js"],
       "matches": ["*://*.olx.com.br/*"]

@@ -45,7 +45,6 @@ sqlite3 data/scraper.db                         # shell SQLite
 docker compose up -d api                        # start API at :8000
 docker compose run --rm api pytest              # run all tests
 docker compose run --rm api pytest tests/test_ingest_dynamic.py::test_olx_house_payload_full_normalization
-make linkedin-fake-run                          # POSTa fixtures linkedin (search + detail) — smoke-test do ingest
 make down                                       # para tudo de ambos os perfis (mantém binds ./data e ./data/pgdata)
 
 # Rodar pytest contra um backend específico (sobrescreve DATABASE_URL):
@@ -59,7 +58,7 @@ There's also a **Make pipeline** that mirrors the extension end-to-end without C
 
 ## Architecture: how the three layers talk
 
-**Frontend → Backend**: `extension/background.js` (MV3 service worker — ephemeral) registers per-domain parsers via `chrome.scripting.registerContentScripts` on `onInstalled`/`onStartup`, plus a `chrome.webNavigation.onHistoryStateUpdated` listener that **re-injects the parser on SPA pushState** (OLX paginates via `&o=2` without full document load). Each parser in `extension/parsers/<domain>_parser.js` is a **static file** (MV3 forbids string-eval). The parser builds an `items` array and sends `{type: "DOM_COUNT", domain, count, items}` via `chrome.runtime.sendMessage`. `background.js` then:
+**Frontend → Backend**: `extension/background.js` (MV3 service worker — ephemeral) registers per-domain parsers via `chrome.scripting.registerContentScripts` on `onInstalled`/`onStartup`, plus a `chrome.webNavigation.onHistoryStateUpdated` listener that **re-injects the parser on SPA pushState** (OLX paginates via `&o=2` without full document load). `registerAllParsers()` **reconciles** rather than blindly adds: it unregisters orphan ids no longer in `DOMAIN_REGISTRY` (e.g. a renamed parser), `updateContentScripts` for ids that already exist, registers genuinely new ids, and swallows the benign `Duplicate script ID` / `Nonexistent script ID` race when `onInstalled` and `onStartup` fire concurrently. Each parser in `extension/parsers/<domain>_parser.js` is a **static file** (MV3 forbids string-eval). The parser builds an `items` array and sends `{type: "DOM_COUNT", domain, count, items}` via `chrome.runtime.sendMessage`. `background.js` then:
 1. Calls `chrome.action.setBadgeText({text, tabId: sender.tab.id})` — **always tabId-scoped** to avoid badge pollution. Empty string when count is 0.
 2. Stashes the payload in `chrome.storage.session` keyed by `tab:<tabId>` so the popup can read it.
 
@@ -92,27 +91,7 @@ Fixture para desenvolvimento: `tmp/olx_next_data.json` (untracked) — um `__NEX
 
 OLX is behind Cloudflare; plain `curl` returns a CAPTCHA page. Use the curl-impersonate Docker image (TLS fingerprint of Chrome 110) — the Makefile already wires this.
 
-## LinkedIn specifics
-
-Unlike OLX, LinkedIn does **not** expose a `__NEXT_DATA__` hydration blob — its jobs UI is an Ember SPA backed by the (auth-only) Voyager API. The extension parses the rendered DOM in the user's logged-in browser. Two parsers live under one `domain_id: "linkedin"`:
-
-- `extension/parsers/linkedin_search_parser.js` — matches `/jobs/search*`, `/jobs/collections/*`. Locates the results `<ul>` by scanning every `<ul>` inside `<main>` and picking the one with the most direct `<li id^="ember…">` children. Iterates only direct LI children to avoid Ember IDs leaking in from nav/recommendation lists. Extracts `external_id` in order: `data-occludable-job-id` → `data-job-id` → `/jobs/view/<id>/` from the canonical anchor. **Never** uses `id="ember<N>"` as identity — Ember regenerates these between renders. Captures `totalAvailable` from the count `<small>` in `#main header` and ships it on the `DOM_COUNT` message; `background.js` persists it on `tab:<id>` in `chrome.storage.session`.
-- `extension/parsers/linkedin_detail_parser.js` — matches `/jobs/view/*` and `/jobs/search/?currentJobId=*`. Emits one item with `description`, `seniority` (chip text mapped via keyword table), `workplace_type` (`Remote`/`Hybrid`/`On-site` via keyword table), `posted_at` (prefer `<time datetime>` over the relative-text fallback), and best-effort `skills[]` from the "How you match" card.
-
-Both parsers carry the same `domain_id`, so the backend pipeline stays single-track. The merge happens server-side: `persistence._insert_items` upserts on the `external_id` partial unique index and uses `COALESCE(EXCLUDED.col, linkedin_jobs.col)` in the `DO UPDATE SET` clause so re-running the search (which omits `description`/etc.) does not wipe enriched columns left by the detail ingest. The normalizer (`api/app/normalization/linkedin.py`) treats everything except `job_title` as optional; `_posted_at_to_iso` parses `Reposted N <unit> ago` (minute/hour/day/week/month/year, with optional `Posted`/`Reposted` prefix) relative to `datetime.now(timezone.utc)`; `_skills_to_json` serializes lists to a single JSON string for symmetric storage across Postgres `JSONB` and SQLite `TEXT`.
-
-LinkedIn DOM class names rotate frequently. Each parser concentrates volatile selectors in a single `SELECTORS` const at the top — adjust there when the layout shifts. **Don't** add anti-bot / impersonation logic; the parser runs in the user's authenticated browser, not as a crawler.
-
-**Fake-data pipeline.** Because `/jobs/search` requires login, the OLX-style `fetch → extract → ingest` chain doesn't apply. Two versioned fixtures simulate the extension's POST shape:
-
-```
-api/tests/fixtures/linkedin_search_list.json  → 4 search cards
-api/tests/fixtures/linkedin_detail.json       → 2 detail enrichments (subset of the cards)
-```
-
-Both are consumed by:
-- `make linkedin-fake-run` (chains `linkedin-fake-search` then `linkedin-fake-detail`) — POSTs them via curl so you can smoke-test the ingest pipeline against either backend without touching LinkedIn.
-- `tests/test_ingest_dynamic.py::test_linkedin_fake_fixture_round_trip` — loads the same files and asserts the merged rows. Editing the fixtures changes both the manual flow and the test in lockstep.
+> **LinkedIn module removed.** A previous LinkedIn jobs module (search + detail parsers) was stripped out (`chore: remove módulo linkedin`) to be rebuilt from scratch. When re-adding it, follow the **"Adding a new domain"** five-file lockstep above. Historical context: LinkedIn is an Ember SPA (no `__NEXT_DATA__`) whose logged-in jobs list is virtualized (only ~7 cards rendered at a time, `li[data-occludable-job-id]`), so a parser must accumulate across scroll rather than snapshot once; the reference Selenium scraper lives at `jobhubmine/scrapers/linkedin-ff-selenium`.
 
 ## Make pipeline (mirrors the extension)
 
@@ -146,12 +125,13 @@ Type mapping conventions (Postgres tree → SQLite tree): `BIGSERIAL PRIMARY KEY
 
 - Service worker is **ephemeral** — never assume in-memory state survives. Use `chrome.storage.session` for cross-event data, `chrome.storage.sync` for user prefs (API URL).
 - **No string-eval**: parsers must be static `.js` files referenced by path. `web_accessible_resources` in `manifest.json` declares each parser with a per-domain `matches` array.
-- `host_permissions` lists the **parser domains** (olx, linkedin, auctions placeholder). These are mandatory because `chrome.scripting.executeScript` (used in the SPA re-inject path) requires actual host permission at call time — `optional_host_permissions` alone isn't enough even when granted. `optional_host_permissions` declares `http://*/*` and `https://*/*` and stays reserved for the **user-configurable API URL**: the options page (`extension/options.{html,js,css}`) requests the specific origin via `chrome.permissions.request({origins: [...]})` when the user saves a custom API URL.
+- `host_permissions` lists the **parser domains** (olx, auctions placeholder). These are mandatory because `chrome.scripting.executeScript` (used in the SPA re-inject path) requires actual host permission at call time — `optional_host_permissions` alone isn't enough even when granted. `optional_host_permissions` declares `http://*/*` and `https://*/*` and stays reserved for the **user-configurable API URL**: the options page (`extension/options.{html,js,css}`) requests the specific origin via `chrome.permissions.request({origins: [...]})` when the user saves a custom API URL.
 - `webNavigation` permission powers the SPA re-injection in `background.js` — without it, OLX pagination via pushState wouldn't trigger the parser.
+- **Stale content scripts**: reloading the extension leaves the *previous* content script alive on already-open tabs (re-injection only happens on a fresh page load), and its `MutationObserver` keeps firing — any `chrome.runtime.sendMessage` then throws `Extension context invalidated`. Parsers should guard every `chrome.*` call behind an `extensionAlive()` helper (`chrome.runtime?.id` becomes undefined once invalidated) and `disconnectAndStop()` the observer on the first dead-context signal, with a `try/catch` for the guard↔send race. **After reloading the extension, refresh open tabs** to pick up the new build.
 
 ## Branch workflow
 
-Skill at `.claude/skills/feature-branch/SKILL.md` (invoke with `/feature-branch [slug]`) checks out a fresh branch from an updated `master`/`main` before any new feature, refactor, or non-trivial fix. Branch names mirror the Conventional Commits vocabulary: `<type>/<scope>-<subject-kebab>` (e.g. `feat/ext-linkedin-detail`, `fix/api-upsert-coalesce`). Pre-flight checks: working tree clean, base branch up to date (`--ff-only`), no force operations. The skill **only** positions the branch — it does not commit. When in doubt about scope or subject, the skill asks before creating.
+Skill at `.claude/skills/feature-branch/SKILL.md` (invoke with `/feature-branch [slug]`) checks out a fresh branch before any new feature, refactor, or non-trivial fix. It **always asks which base branch** to use — current branch (to stack on unmerged work / an open PR), `main`/`master`, or `develop` — rather than defaulting. Branch names mirror the Conventional Commits vocabulary: `<type>/<scope>-<subject-kebab>` (e.g. `feat/ext-olx-pagination`, `fix/api-upsert-coalesce`). Pre-flight checks: working tree clean, base up to date (`--ff-only` when it has an upstream), no force operations. The skill **only** positions the branch — it does not commit. (A `develop` branch exists alongside `main`; pick the base that matches your intended PR target.)
 
 ## Commit workflow
 

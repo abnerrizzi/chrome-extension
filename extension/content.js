@@ -7,10 +7,7 @@
   let count = 0;
   let domain = "unknown";
 
-  if (host.endsWith("linkedin.com")) {
-    domain = "linkedin";
-    count = document.querySelectorAll('[data-job-id], li.jobs-search-results__list-item').length;
-  } else if (host.endsWith("olx.com.br")) {
+  if (host.endsWith("olx.com.br")) {
     domain = "olx";
     count = document.querySelectorAll('a[data-ds-component="DS-AdCard"]').length;
   } else if (host.endsWith("auctions.example")) {
