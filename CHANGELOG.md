@@ -36,6 +36,9 @@ Liquibase changeset id (e.g. `olx-004`).
   `linkedin-001`..`linkedin-004`).
 - Skill `/epic-sync` — registra Epics/Stories do plano no `epic/todo.md` **antes**
   da implementação e mantém o arquivo em sincronia durante a execução.
+- Pipeline `make linkedin-run` (fetch → extract → ingest) espelhando o da OLX,
+  para o DOM **guest** do LinkedIn; `scripts/extract_linkedin.py` parseia o HTML
+  guest (stdlib `html.parser`) com os mesmos campos do ramo `SEL.GUEST` do parser.
 
 ### Changed
 - `api/app/core/persistence.py` reescrito sobre o shim — SQL agora usa `?` e

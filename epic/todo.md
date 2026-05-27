@@ -45,7 +45,8 @@
 - [x] ST-028 Persistence: branches `linkedin`→`linkedin_jobs`, `linkedin_detail`→`linkedin_job_details`
 - [x] ST-029 Liquibase `modules/linkedin.sql` (2 tabelas + external_id) nas 2 árvores + includes
 - [x] ST-030 Testes ingest (422, normalização lista+detalhe, upsert dedupe) — passam em Postgres e SQLite
-- [x] ST-031 CHANGELOG + bump manifest version (0.4.0) + atualizar nota CLAUDE.md
+- [x] ST-031 CHANGELOG + bump manifest version + atualizar nota CLAUDE.md
+- [x] ST-032 Pipeline `make linkedin-run` + `scripts/extract_linkedin.py` (guest), espelha o pipeline OLX
 
 ## Infraestrutura transversal
 - [x] Docker Compose orquestrando db + api + liquibase

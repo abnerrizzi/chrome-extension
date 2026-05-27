@@ -118,7 +118,9 @@ make session-<N> → GET /api/v1/sessions/<N>  (detail with items)
 
 `scripts/extract_olx.py` **mirrors `extension/parsers/olx_parser.js` line-by-line**: same path (`props.pageProps.ads`), same field mapping, same `kindFromRealEstateType` derivation, same `isVendaOuAluguel` filter (venda + aluguel only). Keep them in sync when changing parser logic. `scripts/dump_next_data.py` is the smaller utility that just yanks the JSON out of the HTML.
 
-`URL=…` env var overrides the default search; `API=…` overrides `http://localhost:8000`.
+There's a parallel **LinkedIn pipeline** (`make linkedin-fetch → linkedin-extract → linkedin-ingest`, chained by `make linkedin-run`). It targets the **guest** experience only — `curl` can't be logged in — so it fetches the public `jobs-guest/jobs/api/seeMoreJobPostings/search` fragment (default `LI_URL`, overridable) via the same curl-impersonate image. `scripts/extract_linkedin.py` parses that HTML with stdlib `html.parser` and **mirrors the guest branch (`SEL.GUEST.list`) of `linkedin_parser.js`** — same fields (`external_id, title, company, location, url, posted_raw`, `source_view="guest"`), same tolerant keep filter. It can't exercise the logged-in/virtualized or detail paths (those need a browser session). Keep it in sync with the parser's guest selectors.
+
+`URL=…` (OLX) / `LI_URL=…` (LinkedIn) override the default search; `API=…` overrides `http://localhost:8000`.
 
 ## Database conventions
 
