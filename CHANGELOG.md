@@ -31,7 +31,19 @@ Liquibase changeset id (e.g. `olx-004`).
   em vez de `psycopg` direto, rodando contra qualquer backend.
 - `README.md` e `CLAUDE.md` documentam a seleção dual-backend.
 
-## [0.3.7] — 2026-05-27
+## [0.4.0] — 2026-05-27
+
+### Added
+- **Detalhe de vaga (`/jobs/view`) mais rico**, com regras portadas do scraper
+  Selenium de referência (`jobhubmine/scrapers/linkedin-ff-selenium`). O
+  `linkedin_detail_parser.js` agora lê a lista de critérios "About the job"
+  (`li.description__job-criteria-item`, label/value — fallback guest) além dos
+  insight chips logados, e captura: **`employment_type`** (Full-time/Contract/…),
+  **`job_function`**, **`industries`** e **`raw_json`** — um catch-all com todos
+  os critérios/chips/candidatos serializados (description fica fora, em coluna
+  própria). Changeset `linkedin-005-detail-extra` adiciona as 4 colunas
+  (`raw_json` em `JSONB`/`TEXT`, como skills); upsert por `external_id` com
+  `COALESCE`; schema/normalizer/persistence em lockstep; testes nos dois backends.
 
 ### Fixed
 - **O parser de detalhe não sobrescreve mais a lista de vagas.** Em
