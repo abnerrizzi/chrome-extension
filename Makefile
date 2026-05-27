@@ -45,28 +45,6 @@ ingest: $(PAYLOAD)  ## envia o payload extraído para a API e formata o resultad
 
 run: fetch extract ingest  ## pipeline completo: fetch → extract → ingest
 
-# ---------- LinkedIn (sem fetch — página exige login) ----------
-# A extensão captura DOM no navegador logado; aqui só simulamos o POST via
-# fixtures versionadas. Mesmas JSONs consumidas pelo teste
-# `test_linkedin_fake_fixture_round_trip` em api/tests.
-
-LINKEDIN_SEARCH := api/tests/fixtures/linkedin_search_list.json
-LINKEDIN_DETAIL := api/tests/fixtures/linkedin_detail.json
-
-linkedin-fake-search:  ## POSTa a fixture de busca linkedin (4 cards)
-	@echo "→ POST   $(API)/api/v1/ingest  ($(LINKEDIN_SEARCH))"
-	@curl -sS -X POST $(API)/api/v1/ingest \
-		-H 'Content-Type: application/json' \
-		--data @$(LINKEDIN_SEARCH) | python3 -m json.tool
-
-linkedin-fake-detail:  ## POSTa a fixture de detalhe linkedin (enriquece 2 cards)
-	@echo "→ POST   $(API)/api/v1/ingest  ($(LINKEDIN_DETAIL))"
-	@curl -sS -X POST $(API)/api/v1/ingest \
-		-H 'Content-Type: application/json' \
-		--data @$(LINKEDIN_DETAIL) | python3 -m json.tool
-
-linkedin-fake-run: linkedin-fake-search linkedin-fake-detail  ## search → detail (upsert por external_id)
-
 sessions:  ## lista as últimas sessões persistidas
 	@curl -sS $(API)/api/v1/sessions?limit=10 | python3 -m json.tool
 
@@ -90,5 +68,4 @@ up-sqlite:  ## sobe stack SQLite (liquibase-sqlite update + api)
 down:  ## para todos os serviços de todos os perfis
 	@docker compose --profile postgres --profile sqlite down
 
-.PHONY: help fetch raw extract ingest run sessions clean up-postgres up-sqlite down \
-        linkedin-fake-search linkedin-fake-detail linkedin-fake-run
+.PHONY: help fetch raw extract ingest run sessions clean up-postgres up-sqlite down
