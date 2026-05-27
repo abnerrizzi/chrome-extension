@@ -169,6 +169,10 @@ def test_linkedin_detail_payload_full_normalization():
                 "seniority": "Mid-Senior level",
                 "workplace_type": "Remote",
                 "posted_at": iso_posted,
+                "employment_type": "Full-time",
+                "job_function": "Engineering and Information Technology",
+                "industries": "Software Development",
+                "raw_json": "{\"criteria\":{\"employment type\":\"Full-time\"}}",
                 "skills": ["Python", "Kafka", "PostgreSQL", "Distributed Systems"],
             }],
         },
@@ -179,13 +183,17 @@ def test_linkedin_detail_payload_full_normalization():
     assert out["external_id"] == "3812345678"
     assert out["seniority"] == "Mid-Senior level"
     assert out["workplace_type"] == "Remote"
+    assert out["employment_type"] == "Full-time"
+    assert out["job_function"] == "Engineering and Information Technology"
+    assert out["industries"] == "Software Development"
     # ISO já formatado passa direto pelo normalizer.
     assert out["posted_at"] == iso_posted
-    # Skills sai como JSON string para encaixar no JSONB/TEXT cross-backend.
+    # Skills e raw_json saem como JSON string (JSONB/TEXT cross-backend).
     import json as _json
     assert _json.loads(out["skills"]) == [
         "Python", "Kafka", "PostgreSQL", "Distributed Systems",
     ]
+    assert _json.loads(out["raw_json"])["criteria"]["employment type"] == "Full-time"
     assert out["description"].startswith("About the role:")
 
 
@@ -339,12 +347,13 @@ def test_linkedin_fake_fixture_round_trip():
                 for eid in eids:
                     cur.execute(
                         db.q(
-                            "SELECT job_title, company, description, seniority, workplace_type "
+                            "SELECT job_title, company, description, seniority, "
+                            "       workplace_type, employment_type, raw_json "
                             "FROM linkedin_jobs WHERE external_id=?"
                         ),
                         (eid,),
                     )
-                    title, company, desc, sen, wp = cur.fetchone()
+                    title, company, desc, sen, wp, emp, raw = cur.fetchone()
                     assert title  # job_title sempre persistido
                     assert company  # vindo da lista
                     if eid in enriched_ids:
@@ -354,6 +363,10 @@ def test_linkedin_fake_fixture_round_trip():
                         assert desc is None
                         assert sen is None
                         assert wp is None
+                    # 9990000001 traz os campos novos do detalhe (criteria).
+                    if eid == "9990000001":
+                        assert emp == "Full-time"
+                        assert raw is not None  # raw_json persistido (JSONB/TEXT)
     finally:
         with db.connect() as conn:
             with db.cursor(conn) as cur:

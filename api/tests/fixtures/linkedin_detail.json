@@ -10,6 +10,10 @@
         "seniority": "Mid-Senior level",
         "workplace_type": "Remote",
         "posted_at": "Reposted 2 days ago",
+        "employment_type": "Full-time",
+        "job_function": "Engineering and Information Technology",
+        "industries": "Software Development",
+        "raw_json": "{\"criteria\":{\"seniority level\":\"Mid-Senior level\",\"employment type\":\"Full-time\",\"job function\":\"Engineering and Information Technology\",\"industries\":\"Software Development\"},\"applicants\":\"Over 200 applicants\"}",
         "skills": ["Python", "Kafka", "PostgreSQL", "Distributed Systems"]
       },
       {
