@@ -31,6 +31,16 @@ Liquibase changeset id (e.g. `olx-004`).
   em vez de `psycopg` direto, rodando contra qualquer backend.
 - `README.md` e `CLAUDE.md` documentam a seleção dual-backend.
 
+## [0.3.6] — 2026-05-27
+
+### Added
+- **Fallback para a página guest/deslogada do LinkedIn.** Seletores
+  `base-search-card__title|subtitle`, `job-search-card__location`,
+  `base-card__full-link` e id via `data-entity-urn` (portados do scraper
+  Selenium de referência `jobhubmine/scrapers/linkedin-ff-selenium`) entram
+  quando o DOM logado (`artdeco-entity-lockup`) não está presente — a extensão
+  funciona logada ou em aba anônima.
+
 ## [0.3.5] — 2026-05-27
 
 ### Fixed
@@ -44,11 +54,6 @@ Liquibase changeset id (e.g. `olx-004`).
   com o local entre parênteses (a11y); o sufixo `( … )` é removido. URL canônica
   montada a partir do id. Re-POST da união é idempotente (upsert por
   `external_id`).
-- **Fallback para a página guest/deslogada do LinkedIn.** Seletores
-  `base-search-card__title|subtitle`, `job-search-card__location`,
-  `base-card__full-link` e id via `data-entity-urn` (portados do scraper
-  Selenium de referência) entram quando o DOM logado (`artdeco-entity-lockup`)
-  não está presente — extensão funciona logada ou em aba anônima.
 
 ## [0.3.4] — 2026-05-26
 
