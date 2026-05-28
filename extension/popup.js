@@ -31,16 +31,20 @@ const $tabItems    = document.getElementById("tab-items");
 const $tabResponse = document.getElementById("tab-response");
 const $tabInfo     = document.getElementById("tab-info");
 const $responseDot = document.getElementById("response-dot");
+const $panelItems    = document.getElementById("panel-items");
+const $panelResponse = document.getElementById("panel-response");
+const $panelInfo     = document.getElementById("panel-info");
+const TABS = [
+  [$tabItems,    $panelItems],
+  [$tabResponse, $panelResponse],
+  [$tabInfo,     $panelInfo],
+];
 
 const MAX_PREVIEW = 8;
 
 const $hdrVer = document.getElementById("hdr-ver");
-const MANIFEST_VERSION = chrome.runtime.getManifest().version;
-$hdrVer.textContent = `v${MANIFEST_VERSION}`;
-$version.textContent = `v${MANIFEST_VERSION}`;
-
-// Estado vivo enquanto o popup está aberto. Persiste só em chrome.storage.*.
-let currentDomain = null;
+const VERSION_TEXT = `v${chrome.runtime.getManifest().version}`;
+for (const el of [$hdrVer, $version]) el.textContent = VERSION_TEXT;
 
 async function currentTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -53,26 +57,22 @@ async function getApiBase() {
 }
 
 // One-shot migration: legacy `autoSend: boolean` → `autoSendDomains: Record<string, boolean>`.
-// Roda na abertura do popup; idempotente (não faz nada se já migrou).
+// Returns the current map (after migration if it ran), so callers can avoid a second read.
 async function ensureAutoSendMigration() {
   const stored = await chrome.storage.sync.get(["autoSend", "autoSendDomains"]);
-  if (stored.autoSend === undefined) return; // nada a migrar
-  const next = { ...(stored.autoSendDomains || {}) };
+  const existing = stored.autoSendDomains || {};
+  if (stored.autoSend === undefined) return existing;
   const legacyOn = stored.autoSend === true;
-  for (const d of KNOWN_DOMAINS) {
-    if (next[d] === undefined) next[d] = legacyOn;
-  }
+  const seeded = Object.fromEntries(KNOWN_DOMAINS.map((d) => [d, legacyOn]));
+  const next = { ...seeded, ...existing }; // existing entries win over the legacy seed
   await chrome.storage.sync.set({ autoSendDomains: next });
   await chrome.storage.sync.remove("autoSend");
-}
-
-async function getAutoSendMap() {
-  const { autoSendDomains } = await chrome.storage.sync.get({ autoSendDomains: {} });
-  return autoSendDomains || {};
+  return next;
 }
 
 async function setAutoSendForDomain(domain, on) {
-  const map = await getAutoSendMap();
+  const { autoSendDomains } = await chrome.storage.sync.get({ autoSendDomains: {} });
+  const map = autoSendDomains || {};
   map[domain] = !!on;
   await chrome.storage.sync.set({ autoSendDomains: map });
 }
@@ -157,6 +157,11 @@ function renderItems(domain, items) {
     : `${items.length}`;
 }
 
+function setItemsCount(n) {
+  $count.textContent = String(n);
+  $tabItems.setAttribute("aria-label", `items, ${n}`);
+}
+
 function stripScheme(url) {
   return url.replace(/^https?:\/\//, "");
 }
@@ -167,53 +172,46 @@ function hostFromTab(tab) {
 }
 
 function switchTab(name) {
-  const all = [
-    [$tabItems,    document.getElementById("panel-items")],
-    [$tabResponse, document.getElementById("panel-response")],
-    [$tabInfo,     document.getElementById("panel-info")],
-  ];
-  for (const [btn, panel] of all) {
+  const target = TABS.find(([btn]) => btn.dataset.tab === name);
+  if (!target || target[0].getAttribute("aria-disabled") === "true") return;
+  for (const [btn, panel] of TABS) {
     const active = btn.dataset.tab === name;
-    if (btn.getAttribute("aria-disabled") === "true" && active) continue; // não ativar tab desabilitada
     btn.setAttribute("aria-selected", active ? "true" : "false");
     panel.hidden = !active;
   }
-  if (name === "response") {
-    $responseDot.hidden = true; // visualizou → some o indicador
-  }
+  if (name === "response") $responseDot.hidden = true;
 }
 
-async function renderSiteSection(data, tab) {
+function renderSiteSection(data, tab, autoSendMap) {
   if (!data || !data.domain) {
     $siteSection.dataset.match = "false";
     return;
   }
-  currentDomain = data.domain;
   $siteSection.dataset.match = "true";
   $siteHost.textContent = hostFromTab(tab) || data.domain;
-  const map = await getAutoSendMap();
-  const on = !!map[data.domain];
-  $autosendBtn.setAttribute("aria-checked", on ? "true" : "false");
+  $autosendBtn.setAttribute("aria-checked", autoSendMap[data.domain] ? "true" : "false");
 }
 
 async function load() {
-  await ensureAutoSendMigration();
+  // Independent IO — fan out then merge.
+  const [autoSendMap, tab, base] = await Promise.all([
+    ensureAutoSendMigration(),
+    currentTab(),
+    getApiBase(),
+  ]);
 
-  const tab = await currentTab();
   $tab.textContent = tab ? `#${tab.id}` : "—";
-
-  const base = await getApiBase();
   $endpointPath.textContent = `${stripScheme(base)}/api/v1/ingest`;
   pingApi(base);
 
   if (!tab) {
-    await renderSiteSection(null, null);
+    renderSiteSection(null, null, autoSendMap);
     return;
   }
   const key = `tab:${tab.id}`;
   const data = (await chrome.storage.session.get(key))[key];
 
-  await renderSiteSection(data, tab);
+  renderSiteSection(data, tab, autoSendMap);
 
   if (!data || !data.count) {
     $domain.textContent = "—";
@@ -222,7 +220,7 @@ async function load() {
   }
 
   $domain.textContent = data.domain;
-  $count.textContent = String(data.count);
+  setItemsCount(data.count);
 
   if (data.items && data.items.length) {
     renderItems(data.domain, data.items);
@@ -279,7 +277,6 @@ function showResult(httpStatus, body) {
     $resDetail.appendChild(li);
   }
 
-  // Habilita a aba response e marca como "nova" via dot indicator.
   $tabResponse.removeAttribute("aria-disabled");
   $resultBody.hidden = false;
   $resultEmpty.hidden = true;
@@ -313,18 +310,22 @@ document.getElementById("open-options").addEventListener("click", (e) => {
   chrome.runtime.openOptionsPage();
 });
 
-for (const btn of [$tabItems, $tabResponse, $tabInfo]) {
-  btn.addEventListener("click", () => {
-    if (btn.getAttribute("aria-disabled") === "true") return;
-    switchTab(btn.dataset.tab);
-  });
+for (const [btn] of TABS) {
+  btn.addEventListener("click", () => switchTab(btn.dataset.tab));
 }
 
+// O domínio é resolvido a cada clique a partir do storage da aba ativa, para
+// que mudanças de aba no underlying browser (popup persistente em alguns
+// SOs) não façam a gravação cair no domínio errado.
 $autosendBtn.addEventListener("click", async () => {
-  if (!currentDomain) return; // toggle só age quando há parser
+  const tab = await currentTab();
+  if (!tab) return;
+  const data = (await chrome.storage.session.get(`tab:${tab.id}`))[`tab:${tab.id}`];
+  const domain = data && data.domain;
+  if (!domain) return;
   const next = $autosendBtn.getAttribute("aria-checked") !== "true";
   $autosendBtn.setAttribute("aria-checked", next ? "true" : "false");
-  await setAutoSendForDomain(currentDomain, next);
+  await setAutoSendForDomain(domain, next);
 });
 
 load();
