@@ -1,29 +1,46 @@
 const DEFAULT_API_URL = "http://localhost:8000";
+const KNOWN_DOMAINS = ["olx", "auctions", "linkedin", "linkedin_detail"];
 
 const $count   = document.getElementById("m-count");
 const $domain  = document.getElementById("m-domain");
 const $tab     = document.getElementById("m-tab");
+const $version = document.getElementById("m-version");
 const $statusPill = document.getElementById("status-pill");
 const $apiLabel   = document.getElementById("api-label");
 
-const $previewSection = document.getElementById("preview-section");
-const $previewAux     = document.getElementById("preview-aux");
-const $itemsList      = document.getElementById("items-list");
+const $itemsList    = document.getElementById("items-list");
+const $itemsEmpty   = document.getElementById("items-empty");
+const $previewAux   = document.getElementById("preview-aux");
 
-const $resultSection = document.getElementById("result-section");
-const $resultTitle   = document.getElementById("result-title");
-const $resultAux     = document.getElementById("result-aux");
-const $resTag        = document.getElementById("res-tag");
-const $resMsg        = document.getElementById("res-msg");
-const $resDetail     = document.getElementById("res-detail");
+const $resultTitle = document.getElementById("result-title");
+const $resultAux   = document.getElementById("result-aux");
+const $resTag      = document.getElementById("res-tag");
+const $resMsg      = document.getElementById("res-msg");
+const $resDetail   = document.getElementById("res-detail");
+const $resultBody  = document.getElementById("result-body");
+const $resultEmpty = document.getElementById("result-empty");
 
 const $send         = document.getElementById("send");
 const $endpointPath = document.getElementById("endpoint-path");
 
+const $siteSection = document.getElementById("site-section");
+const $siteHost    = document.getElementById("site-host");
+const $autosendBtn = document.getElementById("autosend-toggle");
+
+const $tabItems    = document.getElementById("tab-items");
+const $tabResponse = document.getElementById("tab-response");
+const $tabInfo     = document.getElementById("tab-info");
+const $responseDot = document.getElementById("response-dot");
+
 const MAX_PREVIEW = 8;
 
 const $hdrVer = document.getElementById("hdr-ver");
-$hdrVer.textContent = `v${chrome.runtime.getManifest().version}`;
+const MANIFEST_VERSION = chrome.runtime.getManifest().version;
+$hdrVer.textContent = `v${MANIFEST_VERSION}`;
+$version.textContent = `v${MANIFEST_VERSION}`;
+
+// Estado vivo enquanto o popup está aberto. Persiste só em chrome.storage.*.
+let currentDomain = null;
 
 async function currentTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -35,13 +52,29 @@ async function getApiBase() {
   return apiUrl.replace(/\/+$/, "");
 }
 
-async function getAutoSend() {
-  const { autoSend } = await chrome.storage.sync.get({ autoSend: false });
-  return !!autoSend;
+// One-shot migration: legacy `autoSend: boolean` → `autoSendDomains: Record<string, boolean>`.
+// Roda na abertura do popup; idempotente (não faz nada se já migrou).
+async function ensureAutoSendMigration() {
+  const stored = await chrome.storage.sync.get(["autoSend", "autoSendDomains"]);
+  if (stored.autoSend === undefined) return; // nada a migrar
+  const next = { ...(stored.autoSendDomains || {}) };
+  const legacyOn = stored.autoSend === true;
+  for (const d of KNOWN_DOMAINS) {
+    if (next[d] === undefined) next[d] = legacyOn;
+  }
+  await chrome.storage.sync.set({ autoSendDomains: next });
+  await chrome.storage.sync.remove("autoSend");
 }
 
-async function setAutoSend(on) {
-  await chrome.storage.sync.set({ autoSend: !!on });
+async function getAutoSendMap() {
+  const { autoSendDomains } = await chrome.storage.sync.get({ autoSendDomains: {} });
+  return autoSendDomains || {};
+}
+
+async function setAutoSendForDomain(domain, on) {
+  const map = await getAutoSendMap();
+  map[domain] = !!on;
+  await chrome.storage.sync.set({ autoSendDomains: map });
 }
 
 function setStatus(state, label) {
@@ -91,7 +124,6 @@ function previewFields(domain, item) {
                .filter(Boolean).join(" · "),
     };
   }
-  // default
   return {
     title: item.title || "",
     price: item.price_raw || "",
@@ -125,7 +157,48 @@ function renderItems(domain, items) {
     : `${items.length}`;
 }
 
+function stripScheme(url) {
+  return url.replace(/^https?:\/\//, "");
+}
+
+function hostFromTab(tab) {
+  if (!tab || !tab.url) return "";
+  try { return new URL(tab.url).host; } catch { return ""; }
+}
+
+function switchTab(name) {
+  const all = [
+    [$tabItems,    document.getElementById("panel-items")],
+    [$tabResponse, document.getElementById("panel-response")],
+    [$tabInfo,     document.getElementById("panel-info")],
+  ];
+  for (const [btn, panel] of all) {
+    const active = btn.dataset.tab === name;
+    if (btn.getAttribute("aria-disabled") === "true" && active) continue; // não ativar tab desabilitada
+    btn.setAttribute("aria-selected", active ? "true" : "false");
+    panel.hidden = !active;
+  }
+  if (name === "response") {
+    $responseDot.hidden = true; // visualizou → some o indicador
+  }
+}
+
+async function renderSiteSection(data, tab) {
+  if (!data || !data.domain) {
+    $siteSection.dataset.match = "false";
+    return;
+  }
+  currentDomain = data.domain;
+  $siteSection.dataset.match = "true";
+  $siteHost.textContent = hostFromTab(tab) || data.domain;
+  const map = await getAutoSendMap();
+  const on = !!map[data.domain];
+  $autosendBtn.setAttribute("aria-checked", on ? "true" : "false");
+}
+
 async function load() {
+  await ensureAutoSendMigration();
+
   const tab = await currentTab();
   $tab.textContent = tab ? `#${tab.id}` : "—";
 
@@ -133,11 +206,18 @@ async function load() {
   $endpointPath.textContent = `${stripScheme(base)}/api/v1/ingest`;
   pingApi(base);
 
-  if (!tab) return;
+  if (!tab) {
+    await renderSiteSection(null, null);
+    return;
+  }
   const key = `tab:${tab.id}`;
   const data = (await chrome.storage.session.get(key))[key];
+
+  await renderSiteSection(data, tab);
+
   if (!data || !data.count) {
     $domain.textContent = "—";
+    $itemsEmpty.hidden = false;
     return;
   }
 
@@ -145,8 +225,10 @@ async function load() {
   $count.textContent = String(data.count);
 
   if (data.items && data.items.length) {
-    $previewSection.hidden = false;
     renderItems(data.domain, data.items);
+    $itemsEmpty.hidden = true;
+  } else {
+    $itemsEmpty.hidden = false;
   }
 
   $send.disabled = data.count === 0;
@@ -156,12 +238,7 @@ async function load() {
   });
 }
 
-function stripScheme(url) {
-  return url.replace(/^https?:\/\//, "");
-}
-
 function showResult(httpStatus, body) {
-  $resultSection.hidden = false;
   const ok      = httpStatus >= 200 && httpStatus < 300;
   const persisted = !!(body && body.persisted);
   const errCount  = body && Array.isArray(body.errors) ? body.errors.length : 0;
@@ -201,6 +278,14 @@ function showResult(httpStatus, body) {
     li.append(dk, dv);
     $resDetail.appendChild(li);
   }
+
+  // Habilita a aba response e marca como "nova" via dot indicator.
+  $tabResponse.removeAttribute("aria-disabled");
+  $resultBody.hidden = false;
+  $resultEmpty.hidden = true;
+  if ($tabResponse.getAttribute("aria-selected") !== "true") {
+    $responseDot.hidden = false;
+  }
 }
 
 $send.addEventListener("click", async () => {
@@ -228,21 +313,18 @@ document.getElementById("open-options").addEventListener("click", (e) => {
   chrome.runtime.openOptionsPage();
 });
 
-async function initAutoSendToggle() {
-  const btn = document.getElementById("autosend-toggle");
-  const state = document.getElementById("autosend-state");
-  if (!btn) return;
-  const render = (on) => {
-    btn.setAttribute("aria-checked", on ? "true" : "false");
-    state.textContent = on ? "enabled" : "disabled";
-  };
-  render(await getAutoSend());
-  btn.addEventListener("click", async () => {
-    const next = btn.getAttribute("aria-checked") !== "true";
-    render(next);
-    await setAutoSend(next);
+for (const btn of [$tabItems, $tabResponse, $tabInfo]) {
+  btn.addEventListener("click", () => {
+    if (btn.getAttribute("aria-disabled") === "true") return;
+    switchTab(btn.dataset.tab);
   });
 }
 
-initAutoSendToggle();
+$autosendBtn.addEventListener("click", async () => {
+  if (!currentDomain) return; // toggle só age quando há parser
+  const next = $autosendBtn.getAttribute("aria-checked") !== "true";
+  $autosendBtn.setAttribute("aria-checked", next ? "true" : "false");
+  await setAutoSendForDomain(currentDomain, next);
+});
+
 load();
