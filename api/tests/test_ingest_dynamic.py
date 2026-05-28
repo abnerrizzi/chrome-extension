@@ -276,3 +276,54 @@ def test_linkedin_list_detail_join_by_external_id():
             assert row[2] == "Mid-Senior level"
             cur.execute(db.q("DELETE FROM linkedin_jobs WHERE external_id=?"), (eid,))
             cur.execute(db.q("DELETE FROM linkedin_job_details WHERE external_id=?"), (eid,))
+
+
+def test_linkedin_detail_upsert_preserves_fields_on_sparse_reemit():
+    """O parser pode re-emitir o mesmo external_id com campos progressivos
+    (description hidrata antes das pílulas de seniority/employment_type/applicants,
+    ou vice-versa). O segundo upsert, mais esparso, NÃO pode sobrescrever
+    valores já persistidos pelo primeiro — daí o COALESCE na cláusula UPDATE."""
+    from app.core import db
+
+    eid = "ln-coalesce-9999997"
+    full = {
+        "domain_id": "linkedin_detail",
+        "raw_data": {"items": [{
+            "external_id": eid,
+            "title": "Coalesce Engineer",
+            "company": "ACME",
+            "location": "Remote",
+            "url": f"https://www.linkedin.com/jobs/view/{eid}/",
+            "description": "Original rich description.",
+            "seniority": "Mid-Senior level",
+            "employment_type": "Full-time",
+            "applicants_raw": "Over 200 applicants",
+        }]},
+    }
+    sparse = {
+        "domain_id": "linkedin_detail",
+        "raw_data": {"items": [{
+            "external_id": eid,
+            "title": "Coalesce Engineer",
+            "url": f"https://www.linkedin.com/jobs/view/{eid}/",
+            # company/location/description/seniority/employment_type/applicants
+            # ausentes — segundo emit antes do DOM completar a hidratação.
+        }]},
+    }
+    r1 = client.post("/api/v1/ingest", json=full)
+    r2 = client.post("/api/v1/ingest", json=sparse)
+    assert r1.status_code == 200 and r2.status_code == 200
+
+    if not (r1.json().get("persisted") and r2.json().get("persisted")):
+        return  # DB sem migrações — skip assert do banco
+
+    with db.connect() as conn:
+        with db.cursor(conn) as cur:
+            cur.execute(db.q(
+                "SELECT company, location, description, seniority, employment_type, applicants "
+                "FROM linkedin_job_details WHERE external_id=?"
+            ), (eid,))
+            row = tuple(cur.fetchone())
+            assert row == ("ACME", "Remote", "Original rich description.",
+                           "Mid-Senior level", "Full-time", 200), row
+            cur.execute(db.q("DELETE FROM linkedin_job_details WHERE external_id=?"), (eid,))

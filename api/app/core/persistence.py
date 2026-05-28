@@ -122,8 +122,12 @@ def _insert_items(cur, domain_id: str, session_id: int, items: list[dict]) -> No
              for it in items],
         )
     elif domain_id == "linkedin_detail":
-        # O detalhe enriquece a linha da lista pelo mesmo external_id (upsert):
-        # descrição, senioridade, regime e nº de candidaturas chegam aqui.
+        # Detalhe vive em `linkedin_job_details`, separado da lista (`linkedin_jobs`);
+        # as duas tabelas se unem por `external_id` em consultas. O parser pode
+        # re-emitir a mesma vaga com campos progressivos (descrição chega antes
+        # das pílulas de senioridade/regime/candidatos, em outras renderizações
+        # vice-versa): COALESCE protege cada coluna opcional para que um upsert
+        # mais esparso não apague valores já persistidos por um upsert anterior.
         cur.executemany(
             db.q(
                 "INSERT INTO linkedin_job_details "
@@ -132,9 +136,13 @@ def _insert_items(cur, domain_id: str, session_id: int, items: list[dict]) -> No
                 "VALUES (?,?,?,?,?,?,?,?,?,?,?) "
                 f"{on_conflict} "
                 "  session_id=EXCLUDED.session_id, title=EXCLUDED.title, "
-                "  company=EXCLUDED.company, location=EXCLUDED.location, url=EXCLUDED.url, "
-                "  description=EXCLUDED.description, seniority=EXCLUDED.seniority, "
-                "  employment_type=EXCLUDED.employment_type, applicants=EXCLUDED.applicants, "
+                "  company=COALESCE(EXCLUDED.company, linkedin_job_details.company), "
+                "  location=COALESCE(EXCLUDED.location, linkedin_job_details.location), "
+                "  url=EXCLUDED.url, "
+                "  description=COALESCE(EXCLUDED.description, linkedin_job_details.description), "
+                "  seniority=COALESCE(EXCLUDED.seniority, linkedin_job_details.seniority), "
+                "  employment_type=COALESCE(EXCLUDED.employment_type, linkedin_job_details.employment_type), "
+                "  applicants=COALESCE(EXCLUDED.applicants, linkedin_job_details.applicants), "
                 "  source_view=EXCLUDED.source_view"
             ),
             [(session_id, it.get("external_id"), it["title"], it.get("company"),
