@@ -115,8 +115,28 @@
 
   function safeText(root, sel) {
     if (!root || !sel) return null;
-    try { const n = root.querySelector(sel); const t = n && (n.textContent || "").trim(); return t || null; }
-    catch (_) { return null; }
+    try {
+      const n = root.querySelector(sel);
+      if (!n) return null;
+      // Layouts logados duplicam o texto via a11y: <span aria-hidden="true">T</span>
+      // <span class="visually-hidden">T</span>. `n.textContent` concatenaria os
+      // dois ("TT") porque não há whitespace entre eles; preferir o aria-hidden
+      // resolve a duplicação.
+      const aria = n.querySelector && n.querySelector('[aria-hidden="true"]');
+      const raw = ((aria ? aria.textContent : n.textContent) || "").replace(/\s+/g, " ").trim();
+      return raw || null;
+    } catch (_) { return null; }
+  }
+
+  // O título logado tem um sufixo de localização entre parênteses para o screen
+  // reader: "Senior Product Design Manager ( São Paulo, Brasil)". O espaço logo
+  // após `(` distingue o sufixo a11y de parênteses legítimos do título
+  // ("Senior Engineer (Backend)" não bate). A `location` já vem em coluna
+  // separada, então o sufixo é puro lixo.
+  function cleanTitle(t) {
+    if (!t) return t;
+    const stripped = t.replace(/\s*\(\s[^)]*\)\s*$/, "").trim();
+    return stripped || t;
   }
   function safeAttr(root, sel, attr) {
     if (!root || !sel) return null;
@@ -195,7 +215,7 @@
     const id = digits(attrOf(el, "data-entity-urn")) || externalIdFromUrl(href);
     return {
       external_id: id || null,
-      title: safeText(el, s.title),
+      title: cleanTitle(safeText(el, s.title)),
       company: safeText(el, s.company),
       location: safeText(el, s.location),
       url: absUrl(href),
@@ -210,7 +230,7 @@
     const id = digits(attrOf(el, "data-occludable-job-id")) || externalIdFromUrl(href);
     return {
       external_id: id || null,
-      title: safeText(el, s.title),
+      title: cleanTitle(safeText(el, s.title)),
       company: safeText(el, s.company),
       location: safeText(el, s.location),
       url: absUrl(href),
@@ -261,7 +281,7 @@
     const id = externalIdFromUrl(location.href);
     return {
       external_id: id || null,
-      title: safeText(document, s.title),
+      title: cleanTitle(safeText(document, s.title)),
       company: safeText(document, s.company),
       location: safeText(document, s.location),
       url: absUrl(location.href),
@@ -279,7 +299,7 @@
     const cls = classifyInsights();
     return {
       external_id: id || null,
-      title: safeText(document, s.title),
+      title: cleanTitle(safeText(document, s.title)),
       company: safeText(document, s.company),
       location: safeText(document, s.location),
       url: id ? `https://www.linkedin.com/jobs/view/${id}/` : absUrl(location.href),
