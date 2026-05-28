@@ -126,12 +126,19 @@ async function setBadge(tabId, count) {
 }
 
 function payloadHash(domain, items) {
-  // Identidade do snapshot: domínio + lista de external_id (estável entre
-  // re-injeções e MutationObserver no mesmo conteúdo).
-  const ids = (items || [])
-    .map((i) => (i && i.external_id != null ? String(i.external_id) : ""))
-    .join(",");
-  return `${domain}|${ids}`;
+  // Identidade do snapshot: domínio + (id|url) por item + `description.length`.
+  // O sinal de conteúdo (length da descrição) espelha o `signature()` do parser
+  // — sem ele, o `linkedin_detail` re-emite o mesmo external_id quando a
+  // descrição/pílulas hidratam após o primeiro render e o dedup engole o
+  // POST de enriquecimento. Estável entre re-injeções e MutationObserver
+  // re-fires no mesmo conteúdo.
+  const parts = (items || []).map((i) => {
+    if (!i) return ":";
+    const id = i.external_id != null ? String(i.external_id) : (i.url || "");
+    const dlen = i.description ? i.description.length : 0;
+    return `${id}:${dlen}`;
+  });
+  return `${domain}|${parts.join(",")}`;
 }
 
 async function autoSendIfEnabled(tabId, domain, items) {
