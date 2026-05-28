@@ -55,6 +55,7 @@
 - [x] ST-036 `extension/popup.css` `.tabs`/`.tab`/`.tabpanel`/`.badge`, `.site[data-match=false]` hide, fresh-response dot
 - [x] ST-037 `extension/popup.js` switching de tabs, per-site auto-send (`autoSendDomains` map) + migração legacy do `autoSend` boolean
 - [x] ST-038 `extension/background.js` `autoSendIfEnabled` consulta `autoSendDomains[domain]` com fallback p/ `autoSend` legado
+- [x] ST-039 `extension/popup.js` lê `tab:<id>:detail` quando não há lista (página /jobs/view/NNN isolada) — toggle e send resolvem do slot ativo
 
 ## Infraestrutura transversal
 - [x] Docker Compose orquestrando db + api + liquibase

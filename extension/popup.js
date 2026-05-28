@@ -208,8 +208,15 @@ async function load() {
     renderSiteSection(null, null, autoSendMap);
     return;
   }
-  const key = `tab:${tab.id}`;
-  const data = (await chrome.storage.session.get(key))[key];
+  // Lê os dois slots: `tab:<id>` (lista) e `tab:<id>:detail` (detalhe enriquecido).
+  // Lista domina quando ambos existem — mesma precedência que `background.js`
+  // aplica para o badge — para que /jobs/search/?currentJobId=NNN continue
+  // mostrando a lista. Páginas puras de detalhe (/jobs/view/NNN) caem no slot
+  // de detalhe e usam a mesma pipeline de items/send.
+  const listKey = `tab:${tab.id}`;
+  const detailKey = `tab:${tab.id}:detail`;
+  const stored = await chrome.storage.session.get([listKey, detailKey]);
+  const data = stored[listKey] || stored[detailKey];
 
   renderSiteSection(data, tab, autoSendMap);
 
@@ -320,7 +327,10 @@ for (const [btn] of TABS) {
 $autosendBtn.addEventListener("click", async () => {
   const tab = await currentTab();
   if (!tab) return;
-  const data = (await chrome.storage.session.get(`tab:${tab.id}`))[`tab:${tab.id}`];
+  const listKey = `tab:${tab.id}`;
+  const detailKey = `tab:${tab.id}:detail`;
+  const stored = await chrome.storage.session.get([listKey, detailKey]);
+  const data = stored[listKey] || stored[detailKey];
   const domain = data && data.domain;
   if (!domain) return;
   const next = $autosendBtn.getAttribute("aria-checked") !== "true";
