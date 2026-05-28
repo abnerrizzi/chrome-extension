@@ -17,7 +17,9 @@ Liquibase changeset id (e.g. `olx-004`).
   (`domain`, `tab`, `endpoint`, `configurar`) consolidam em **info**. O badge
   de itens vive na própria aba `items`. A aba `response` ganha um indicador
   (`badge dot`) quando há resposta nova e fica `aria-disabled` enquanto não
-  houve POST.
+  houve POST. O popup agora lê os dois slots de sessão (`tab:<id>` e
+  `tab:<id>:detail`) — páginas isoladas de detalhe LinkedIn (`/jobs/view/NNN`)
+  surgem na aba `items` em vez de mostrar "no parser matched".
 - **Auto-send por site** — o toggle global `autoSend` vira o mapa
   `autoSendDomains: Record<string, boolean>` em `chrome.storage.sync`. A
   seção `site` mostra o host atual e o toggle é **escondido** em abas sem
