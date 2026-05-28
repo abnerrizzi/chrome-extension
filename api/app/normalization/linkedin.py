@@ -15,12 +15,25 @@ Transforma:
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 _INT_RX = re.compile(r"\d[\d.,]*")
 _ISO_RX = re.compile(r"^\d{4}-\d{2}-\d{2}")
 _DIGITS_ONLY = re.compile(r"^\d{10,}$")  # unix epoch (s ou ms)
+_REL_RX = re.compile(
+    r"^(?:Reposted\s+)?(\d+)\s+(second|minute|hour|day|week|month|year)s?\s+ago$",
+    re.IGNORECASE,
+)
+_REL_UNITS = {
+    "second": timedelta(seconds=1),
+    "minute": timedelta(minutes=1),
+    "hour":   timedelta(hours=1),
+    "day":    timedelta(days=1),
+    "week":   timedelta(weeks=1),
+    "month":  timedelta(days=30),
+    "year":   timedelta(days=365),
+}
 
 
 def _clean(s) -> Optional[str]:
@@ -43,9 +56,10 @@ def _first_int(raw: Optional[str]) -> Optional[int]:
 
 
 def _posted_to_iso(raw) -> Optional[str]:
-    """ISO-8601 best-effort. Aceita ISO (passa direto) e unix epoch (s/ms).
-    Texto relativo do LinkedIn (`"2 days ago"`) não é convertido — retorna o
-    original para não fabricar um timestamp impreciso."""
+    """ISO-8601 best-effort. Aceita ISO (passa direto), unix epoch (s/ms) e o
+    formato relativo do LinkedIn (`"2 days ago"`, `"Reposted 3 weeks ago"`).
+    Strings não-reconhecidas viram `None` em vez de propagar para o
+    `TIMESTAMPTZ` no Postgres, que falharia o INSERT inteiro."""
     if raw in (None, "", 0):
         return None
     s = str(raw).strip()
@@ -56,7 +70,11 @@ def _posted_to_iso(raw) -> Optional[str]:
         if ts > 10_000_000_000:  # ms
             ts = ts / 1000
         return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
-    return s
+    m = _REL_RX.match(s)
+    if m:
+        n, unit = int(m.group(1)), m.group(2).lower()
+        return (datetime.now(timezone.utc) - _REL_UNITS[unit] * n).isoformat()
+    return None
 
 
 def normalize_list(items: list[dict]) -> list[dict]:

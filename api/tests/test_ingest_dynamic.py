@@ -143,6 +143,36 @@ def test_linkedin_list_normalization():
     assert out["source_view"] == "loggedin"
 
 
+def test_linkedin_relative_posted_raw_converts_to_iso():
+    """`posted_raw: "2 days ago"` vira ISO-8601; strings não-reconhecidas viram
+    None. Sem a conversão, o texto cru chegava ao `TIMESTAMPTZ` no Postgres e
+    estourava o INSERT inteiro."""
+    payload = {
+        "domain_id": "linkedin",
+        "raw_data": {
+            "items": [
+                {
+                    "external_id": "9911223344",
+                    "title": "QA Lead",
+                    "url": "https://www.linkedin.com/jobs/view/9911223344/",
+                    "posted_raw": "Reposted 2 days ago",
+                },
+                {
+                    "external_id": "9911223345",
+                    "title": "QA Lead",
+                    "url": "https://www.linkedin.com/jobs/view/9911223345/",
+                    "posted_raw": "thursday",
+                },
+            ],
+        },
+    }
+    r = client.post("/api/v1/ingest", json=payload)
+    assert r.status_code == 200, r.text
+    rel, junk = r.json()["normalized"]
+    assert rel["posted_at"] is not None and "T" in rel["posted_at"]
+    assert junk["posted_at"] is None
+
+
 def test_linkedin_detail_normalization():
     payload = {
         "domain_id": "linkedin_detail",
