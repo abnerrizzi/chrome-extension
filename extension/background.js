@@ -145,8 +145,7 @@ async function autoSendIfEnabled(tabId, domain, items) {
     apiUrl: "http://localhost:8000",
   });
   const map = autoSendDomains || {};
-  const enabled = map[domain] !== undefined ? !!map[domain] : autoSend === true;
-  if (!enabled) return;
+  if (!(map[domain] ?? (autoSend === true))) return;
 
   const hash = payloadHash(domain, items);
   // Dedupe por domínio: lista e detalhe na mesma aba têm hashes independentes.
