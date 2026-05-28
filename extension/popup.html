@@ -5,7 +5,7 @@
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <div class="card">
+    <div class="card pop-wrap lyt-b">
       <header class="hdr">
         <div class="hdr-left">
           <span class="prompt">$</span>
@@ -18,25 +18,10 @@
         </div>
       </header>
 
-      <section class="meta">
-        <div class="meta-row">
-          <span class="k">domain</span>
-          <span class="v" id="m-domain">—</span>
-        </div>
-        <div class="meta-row">
-          <span class="k">tab</span>
-          <span class="v" id="m-tab">—</span>
-        </div>
-        <div class="meta-row">
-          <span class="k">items</span>
-          <span class="v"><span class="count" id="m-count">0</span></span>
-        </div>
-      </section>
-
-      <section class="site">
+      <section class="site" id="site-section" data-match="false">
         <div class="site-text">
           <span class="site-label">auto-send</span>
-          <span class="site-domain" id="autosend-state">disabled</span>
+          <span class="site-domain" id="site-host">—</span>
         </div>
         <button class="site-toggle" type="button" aria-checked="false"
                 role="switch" aria-label="auto-send" id="autosend-toggle">
@@ -44,28 +29,76 @@
         </button>
       </section>
 
-      <section class="preview" id="preview-section" hidden>
+      <nav class="tabs" role="tablist" aria-label="popup sections">
+        <button class="tab" role="tab" type="button" id="tab-items"
+                aria-controls="panel-items" aria-selected="true" data-tab="items">
+          <span class="tab-label">items</span>
+          <span class="badge" id="m-count">0</span>
+        </button>
+        <button class="tab" role="tab" type="button" id="tab-response"
+                aria-controls="panel-response" aria-selected="false"
+                aria-disabled="true" data-tab="response">
+          <span class="tab-label">response</span>
+          <span class="badge dot" id="response-dot" hidden></span>
+        </button>
+        <button class="tab" role="tab" type="button" id="tab-info"
+                aria-controls="panel-info" aria-selected="false" data-tab="info">
+          <span class="tab-label">info</span>
+        </button>
+      </nav>
+
+      <section class="tabpanel" role="tabpanel" id="panel-items"
+               aria-labelledby="tab-items">
         <div class="section-bar">
           <span class="caret">▾</span>
           <span class="section-title">items.preview</span>
           <span class="section-aux" id="preview-aux"></span>
         </div>
         <ol class="items" id="items-list"></ol>
+        <p class="empty" id="items-empty" hidden>no parser matched this page</p>
       </section>
 
-      <section class="result" id="result-section" hidden>
+      <section class="tabpanel" role="tabpanel" id="panel-response"
+               aria-labelledby="tab-response" hidden>
         <div class="section-bar">
           <span class="caret">▾</span>
-          <span class="section-title" id="result-title">ingest.ok</span>
-          <span class="section-aux" id="result-aux">status 200</span>
+          <span class="section-title" id="result-title">ingest</span>
+          <span class="section-aux" id="result-aux"></span>
         </div>
-        <div class="result-body">
+        <div class="result-body" id="result-body" hidden>
           <div class="res-row">
             <span class="res-tag" id="res-tag">success</span>
             <span class="res-msg" id="res-msg">persisted</span>
           </div>
           <ul class="res-detail" id="res-detail"></ul>
         </div>
+        <p class="empty" id="result-empty">no request sent yet</p>
+      </section>
+
+      <section class="tabpanel" role="tabpanel" id="panel-info"
+               aria-labelledby="tab-info" hidden>
+        <div class="meta">
+          <div class="meta-row">
+            <span class="k">domain</span>
+            <span class="v" id="m-domain">—</span>
+          </div>
+          <div class="meta-row">
+            <span class="k">tab</span>
+            <span class="v" id="m-tab">—</span>
+          </div>
+          <div class="meta-row">
+            <span class="k">version</span>
+            <span class="v" id="m-version">—</span>
+          </div>
+          <div class="meta-row">
+            <span class="k">endpoint</span>
+            <span class="v endpoint-line">
+              <span class="method">POST</span>
+              <span class="path" id="endpoint-path">localhost:8000/api/v1/ingest</span>
+            </span>
+          </div>
+        </div>
+        <a href="#" class="link" id="open-options">⚙ configurar</a>
       </section>
 
       <footer class="ftr">
@@ -73,11 +106,6 @@
           <span class="btn-glyph">↑</span>
           <span class="btn-label">Enviar para API</span>
         </button>
-        <div class="endpoint">
-          <span class="method">POST</span>
-          <span class="path" id="endpoint-path">localhost:8000/api/v1/ingest</span>
-        </div>
-        <a href="#" class="link" id="open-options">⚙ configurar</a>
       </footer>
     </div>
     <script src="popup.js"></script>
