@@ -11,6 +11,25 @@ Liquibase changeset id (e.g. `olx-004`).
 ## [Unreleased]
 
 ### Added
+- **Popup tabbed UI** (`items` / `response` / `info`) — referência em
+  `extension/design/B_tabbed.html`. A resposta da API deixa de aparecer
+  inline abaixo do preview e migra para uma aba dedicada; os metadados
+  (`domain`, `tab`, `endpoint`, `configurar`) consolidam em **info**. O badge
+  de itens vive na própria aba `items`. A aba `response` ganha um indicador
+  (`badge dot`) quando há resposta nova e fica `aria-disabled` enquanto não
+  houve POST.
+- **Auto-send por site** — o toggle global `autoSend` vira o mapa
+  `autoSendDomains: Record<string, boolean>` em `chrome.storage.sync`. A
+  seção `site` mostra o host atual e o toggle é **escondido** em abas sem
+  parser registrado (`data-match="false"`). Migração legacy: na primeira
+  abertura do popup após upgrade, se a chave `autoSend` boolean existir, ela
+  é replicada em todos os domínios conhecidos e removida.
+
+### Changed
+- `extension/background.js → autoSendIfEnabled` consulta
+  `autoSendDomains[domain]` com fallback para o boolean legado (zero
+  perda de configuração durante o upgrade).
+
 - **Backend SQLite alternativo** ao Postgres, escolhido pelo scheme do
   `DATABASE_URL` (`postgresql://…` vs `sqlite:///…`). Shim de dialeto em
   `api/app/core/db.py` traduz placeholders, `ON CONFLICT` e `RETURNING/lastrowid`.
