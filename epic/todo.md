@@ -54,7 +54,7 @@
 - [x] ST-035 `extension/popup.html` reestrutura: 3 tabs (items/response/info) + tabpanels, site section acima das tabs, endpoint/configurar migram p/ info
 - [x] ST-036 `extension/popup.css` `.tabs`/`.tab`/`.tabpanel`/`.badge`, `.site[data-match=false]` hide, fresh-response dot
 - [x] ST-037 `extension/popup.js` switching de tabs, per-site auto-send (`autoSendDomains` map) + migração legacy do `autoSend` boolean
-- [ ] ST-038 `extension/background.js` `autoSendIfEnabled` consulta `autoSendDomains[domain]` com fallback p/ `autoSend` legado
+- [x] ST-038 `extension/background.js` `autoSendIfEnabled` consulta `autoSendDomains[domain]` com fallback p/ `autoSend` legado
 
 ## Infraestrutura transversal
 - [x] Docker Compose orquestrando db + api + liquibase

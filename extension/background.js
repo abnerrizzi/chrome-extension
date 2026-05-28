@@ -136,11 +136,17 @@ function payloadHash(domain, items) {
 
 async function autoSendIfEnabled(tabId, domain, items) {
   if (!Array.isArray(items) || items.length === 0) return;
-  const { autoSend, apiUrl } = await chrome.storage.sync.get({
+  // Per-site toggle: o popup grava `autoSendDomains[<domain>]`. O boolean
+  // `autoSend` é fallback transitório (instalações pré-0.5.0) e só vale até
+  // o popup abrir e migrar.
+  const { autoSendDomains, autoSend, apiUrl } = await chrome.storage.sync.get({
+    autoSendDomains: {},
     autoSend: false,
     apiUrl: "http://localhost:8000",
   });
-  if (!autoSend) return;
+  const map = autoSendDomains || {};
+  const enabled = map[domain] !== undefined ? !!map[domain] : autoSend === true;
+  if (!enabled) return;
 
   const hash = payloadHash(domain, items);
   // Dedupe por domínio: lista e detalhe na mesma aba têm hashes independentes.
