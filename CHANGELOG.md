@@ -25,11 +25,6 @@ Liquibase changeset id (e.g. `olx-004`).
   abertura do popup após upgrade, se a chave `autoSend` boolean existir, ela
   é replicada em todos os domínios conhecidos e removida.
 
-### Changed
-- `extension/background.js → autoSendIfEnabled` consulta
-  `autoSendDomains[domain]` com fallback para o boolean legado (zero
-  perda de configuração durante o upgrade).
-
 - **Backend SQLite alternativo** ao Postgres, escolhido pelo scheme do
   `DATABASE_URL` (`postgresql://…` vs `sqlite:///…`). Shim de dialeto em
   `api/app/core/db.py` traduz placeholders, `ON CONFLICT` e `RETURNING/lastrowid`.
@@ -68,6 +63,9 @@ Liquibase changeset id (e.g. `olx-004`).
 - `extension/background.js` — domínios `*_detail` gravam em `tab:<id>:detail`
   (slot separado), não alteram o badge e têm dedupe de auto-send por domínio; o
   cleanup ao fechar a aba remove todas as chaves `tab:<id>*`.
+- `extension/background.js → autoSendIfEnabled` consulta
+  `autoSendDomains[domain]` (per-site, novo schema 0.5.0) com fallback para o
+  boolean legado durante o upgrade.
 
 ## [0.3.7] — 2026-05-27
 
