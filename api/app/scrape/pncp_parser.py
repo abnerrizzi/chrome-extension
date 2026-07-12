@@ -14,6 +14,19 @@ def parse_detail_json(json_str: str) -> list[dict]:
     unidade = data.get("unidadeOrgao") or {}
     amparo = data.get("amparoLegal") or {}
 
+    itens = []
+    for pi in (data.get("itens") or []):
+        itens.append({
+            "numero_item": int(pi.get("numeroItem") or 0),
+            "descricao": str(pi.get("descricao") or ""),
+            "material_ou_servico": str(pi.get("materialOuServico") or ""),
+            "valor_unitario_estimado": float(pi["valorUnitarioEstimado"]) if pi.get("valorUnitarioEstimado") is not None else None,
+            "valor_total": float(pi["valorTotal"]) if pi.get("valorTotal") is not None else None,
+            "quantidade": float(pi["quantidade"]) if pi.get("quantidade") is not None else None,
+            "unidade_medida": str(pi.get("unidadeMedida") or "").strip(),
+            "situacao": str(pi.get("situacaoCompraItemNome") or pi.get("situacaoCompraItem") or ""),
+        })
+
     item = {
         "external_id": str(data.get("numeroControlePNCP") or ""),
         "pncp_id": str(data.get("numeroControlePNCP") or ""),
@@ -35,5 +48,6 @@ def parse_detail_json(json_str: str) -> list[dict]:
         "data_encerramento_proposta_raw": str(data.get("dataEncerramentoProposta") or ""),
         "link_sistema_origem": str(data.get("linkSistemaOrigem") or ""),
         "url": "",
+        "itens": itens,
     }
     return [item]

@@ -17,12 +17,27 @@
 
   console.info(`[pncp_detail_parser] Buscando detalhes via API: ${cnpj}/${ano}/${seq}`);
 
-  fetch(apiUrl)
-    .then(res => {
+  const itemsUrl = `${window.location.origin}/api/pncp/v1/orgaos/${cnpj}/compras/${ano}/${seq}/itens?pagina=1&tamanhoPagina=100`;
+
+  Promise.all([
+    fetch(apiUrl).then(res => {
       if (!res.ok) throw new Error(`HTTP status ${res.status}`);
       return res.json();
-    })
-    .then(data => {
+    }),
+    fetch(itemsUrl).then(res => res.ok ? res.json() : [])
+  ])
+    .then(([data, itemsList]) => {
+      const itens = (itemsList || []).map(pi => ({
+        numero_item: Number(pi.numeroItem || 0),
+        descricao: String(pi.descricao || ""),
+        material_ou_servico: String(pi.materialOuServico || ""),
+        valor_unitario_estimado: pi.valorUnitarioEstimado != null ? Number(pi.valorUnitarioEstimado) : null,
+        valor_total: pi.valorTotal != null ? Number(pi.valorTotal) : null,
+        quantidade: pi.quantidade != null ? Number(pi.quantidade) : null,
+        unidade_medida: String(pi.unidadeMedida || "").trim(),
+        situacao: String(pi.situacaoCompraItemNome || pi.situacaoCompraItem || ""),
+      }));
+
       const item = {
         external_id: String(data.numeroControlePNCP || `${cnpj}/${ano}/${seq}`),
         pncp_id: String(data.numeroControlePNCP || ""),
@@ -44,6 +59,7 @@
         data_encerramento_proposta_raw: String(data.dataEncerramentoProposta || ""),
         link_sistema_origem: String(data.linkSistemaOrigem || ""),
         url: currentUrl,
+        itens: itens,
       };
 
       chrome.runtime.sendMessage({

@@ -38,3 +38,24 @@ CREATE INDEX ix_pncp_items_data_publicacao ON pncp_items(data_publicacao_pncp);
 --precondition-sql-check expectedResult:0 SELECT count(*) FROM sqlite_master WHERE type='index' AND name='uq_pncp_items_external_id'
 CREATE UNIQUE INDEX uq_pncp_items_external_id ON pncp_items(external_id) WHERE external_id IS NOT NULL;
 --rollback DROP INDEX IF EXISTS uq_pncp_items_external_id;
+
+--changeset claude:pncp-003-purchase-items
+--preconditions onFail:HALT onError:HALT
+--precondition-sql-check expectedResult:1 SELECT count(*) FROM sqlite_master WHERE type='table' AND name='pncp_items'
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM sqlite_master WHERE type='table' AND name='pncp_purchase_items'
+CREATE TABLE pncp_purchase_items (
+    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+    purchase_id             INTEGER NOT NULL REFERENCES pncp_items(id) ON DELETE CASCADE,
+    numero_item             INTEGER NOT NULL,
+    descricao               TEXT,
+    material_ou_servico     TEXT,
+    valor_unitario_estimado NUMERIC,
+    valor_total             NUMERIC,
+    quantidade              NUMERIC,
+    unidade_medida          TEXT,
+    situacao                TEXT,
+    created_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX ix_pncp_purchase_items_purchase ON pncp_purchase_items(purchase_id);
+--rollback DROP INDEX IF EXISTS ix_pncp_purchase_items_purchase;
+--rollback DROP TABLE IF EXISTS pncp_purchase_items;

@@ -84,6 +84,19 @@ def normalize_detail(items: list[dict]) -> list[dict]:
             municipio = municipio or m
             uf = uf or u
 
+        normalized_itens = []
+        for pi in (it.get("itens") or []):
+            normalized_itens.append({
+                "numero_item": int(pi.get("numero_item") or 0),
+                "descricao": (pi.get("descricao") or "").strip(),
+                "material_ou_servico": (pi.get("material_ou_servico") or "").strip(),
+                "valor_unitario_estimado": float(pi["valor_unitario_estimado"]) if pi.get("valor_unitario_estimado") is not None else None,
+                "valor_total": float(pi["valor_total"]) if pi.get("valor_total") is not None else None,
+                "quantidade": float(pi["quantidade"]) if pi.get("quantidade") is not None else None,
+                "unidade_medida": (pi.get("unidade_medida") or "").strip(),
+                "situacao": (pi.get("situacao") or "").strip(),
+            })
+
         res.append({
             "external_id": (it.get("external_id") or "").strip(),
             "pncp_id": (it.get("pncp_id") or "").strip(),
@@ -105,5 +118,6 @@ def normalize_detail(items: list[dict]) -> list[dict]:
             "data_encerramento_proposta": _to_iso(it.get("data_encerramento_proposta_raw")),
             "link_sistema_origem": (it.get("link_sistema_origem") or "").strip(),
             "url": (it.get("url") or "").strip(),
+            "itens": normalized_itens,
         })
     return res

@@ -23,6 +23,23 @@
     "data_abertura_proposta_raw":      { "type": "string" },
     "data_encerramento_proposta_raw":  { "type": "string" },
     "link_sistema_origem":             { "type": "string" },
-    "url":                             { "type": "string" }
+    "url":                             { "type": "string" },
+    "itens": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["numero_item", "descricao"],
+        "properties": {
+          "numero_item":             { "type": "integer" },
+          "descricao":               { "type": "string" },
+          "material_ou_servico":      { "type": "string" },
+          "valor_unitario_estimado": { "type": ["number", "null"] },
+          "valor_total":             { "type": ["number", "null"] },
+          "quantidade":              { "type": ["number", "null"] },
+          "unidade_medida":          { "type": "string" },
+          "situacao":                { "type": "string" }
+        }
+      }
+    }
   }
 }

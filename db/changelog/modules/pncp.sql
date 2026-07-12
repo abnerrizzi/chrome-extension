@@ -38,3 +38,24 @@ CREATE INDEX ix_pncp_items_data_publicacao ON pncp_items(data_publicacao_pncp);
 --precondition-sql-check expectedResult:0 SELECT count(*) FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'pncp_items' AND indexname = 'uq_pncp_items_external_id'
 CREATE UNIQUE INDEX uq_pncp_items_external_id ON pncp_items(external_id) WHERE external_id IS NOT NULL;
 --rollback DROP INDEX IF EXISTS uq_pncp_items_external_id;
+
+--changeset claude:pncp-003-purchase-items
+--preconditions onFail:HALT onError:HALT
+--precondition-sql-check expectedResult:1 SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='pncp_items'
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='pncp_purchase_items'
+CREATE TABLE pncp_purchase_items (
+    id                      BIGSERIAL PRIMARY KEY,
+    purchase_id             BIGINT NOT NULL REFERENCES pncp_items(id) ON DELETE CASCADE,
+    numero_item             INTEGER NOT NULL,
+    descricao               TEXT,
+    material_ou_servico     VARCHAR(2),
+    valor_unitario_estimado NUMERIC(18,4),
+    valor_total             NUMERIC(18,4),
+    quantidade              NUMERIC(18,4),
+    unidade_medida          VARCHAR(32),
+    situacao                VARCHAR(64),
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX ix_pncp_purchase_items_purchase ON pncp_purchase_items(purchase_id);
+--rollback DROP INDEX IF EXISTS ix_pncp_purchase_items_purchase;
+--rollback DROP TABLE IF EXISTS pncp_purchase_items;
