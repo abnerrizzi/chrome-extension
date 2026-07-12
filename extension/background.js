@@ -1,6 +1,30 @@
 // Service worker (MV3). Efêmero: só executa em resposta a eventos.
 // Não armazene estado em variáveis globais — use chrome.storage.session.
 
+let logPrefs = { enabled: true, level: 'info' };
+chrome.storage.sync.get({ consoleLogEnabled: true, consoleLogLevel: 'info' }, (res) => {
+  logPrefs.enabled = res.consoleLogEnabled;
+  logPrefs.level = res.consoleLogLevel;
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'sync') {
+    if (changes.consoleLogEnabled !== undefined) logPrefs.enabled = changes.consoleLogEnabled.newValue;
+    if (changes.consoleLogLevel !== undefined) logPrefs.level = changes.consoleLogLevel.newValue;
+  }
+});
+
+const originalInfo = console.info;
+const originalDebug = console.debug;
+
+console.info = (...args) => {
+  if (logPrefs.enabled) originalInfo.apply(console, args);
+};
+
+console.debug = (...args) => {
+  if (logPrefs.enabled && logPrefs.level === 'debug') originalDebug.apply(console, args);
+};
+
 const DOMAIN_REGISTRY = [
   {
     id: "olx",
