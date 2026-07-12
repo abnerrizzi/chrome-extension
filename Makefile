@@ -89,7 +89,31 @@ up-sqlite:  ## sobe stack SQLite (liquibase-sqlite update + api)
 	@docker compose --profile sqlite run --rm liquibase-sqlite update
 	@DATABASE_URL=$${DATABASE_URL:-sqlite:////data/scraper.db} docker compose up -d api
 
-down:  ## para todos os serviços de todos os perfis
-	@docker compose --profile postgres --profile sqlite down
+# Determine backend/profile/service argument for stop command
+CMD_ARG := $(filter all postgres sqlite api,$(MAKECMDGOALS))
 
-.PHONY: help fetch raw extract ingest run linkedin-fetch linkedin-extract linkedin-ingest linkedin-run sessions clean up-postgres up-sqlite down
+stop:  ## para todos ou serviços específicos (uso: make stop [all|postgres|sqlite|api])
+	@if [ "$(CMD_ARG)" = "postgres" ]; then \
+		echo "→ parando stack Postgres..."; \
+		docker compose --profile postgres stop; \
+	elif [ "$(CMD_ARG)" = "sqlite" ]; then \
+		echo "→ parando stack SQLite..."; \
+		docker compose --profile sqlite stop; \
+	elif [ "$(CMD_ARG)" = "api" ]; then \
+		echo "→ parando API..."; \
+		docker compose stop api; \
+	elif [ "$(CMD_ARG)" = "all" ] || [ -z "$(CMD_ARG)" ]; then \
+		echo "→ parando tudo..."; \
+		docker compose --profile postgres --profile sqlite stop; \
+	else \
+		echo "Erro: argumento inválido '$(CMD_ARG)'"; \
+		echo "Uso: make stop [all|postgres|sqlite|api]"; \
+		exit 1; \
+	fi
+
+# Alvos dummy para que o make não reclame quando passados como argumentos
+.PHONY: all postgres sqlite api
+all postgres sqlite api:
+	@:
+
+.PHONY: help fetch raw extract ingest run linkedin-fetch linkedin-extract linkedin-ingest linkedin-run sessions clean up-postgres up-sqlite stop
