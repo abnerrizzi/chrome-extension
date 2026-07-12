@@ -43,13 +43,25 @@
   }
 
   function getFieldByLabel(card, label) {
-    const elements = card.querySelectorAll('span, div, strong');
+    const elements = card.querySelectorAll('span, div, strong, p');
+    let bestMatch = null;
     for (const el of elements) {
       const rawText = el.textContent || "";
       const idx = rawText.indexOf(label);
       if (idx !== -1) {
-        return rawText.slice(idx + label.length).trim();
+        const value = rawText.slice(idx + label.length).trim();
+        if (!bestMatch || value.length < bestMatch.length) {
+          bestMatch = value;
+        }
       }
+    }
+    if (bestMatch) {
+      // Split by common label headers to avoid leakage if we grabbed a parent container
+      const nextLabelIndex = bestMatch.search(/(?:Id contratação PNCP|Modalidade da Contratação|Última Atualização|Órgão|Local|Objeto):/);
+      if (nextLabelIndex !== -1) {
+        bestMatch = bestMatch.slice(0, nextLabelIndex).trim();
+      }
+      return bestMatch.trim();
     }
     return null;
   }

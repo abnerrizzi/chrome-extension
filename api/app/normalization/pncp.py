@@ -23,9 +23,12 @@ def _to_iso(raw: Optional[str]) -> Optional[str]:
             return datetime.strptime(raw_clean, fmt).isoformat()
         except ValueError:
             continue
-    # If it already looks like ISO format (e.g. contains T and Z or offsets)
-    if "T" in raw_clean:
-        return raw_clean
+    # If it already looks like ISO format: check for 'T' followed by digits
+    if "T" in raw_clean and any(c.isdigit() for c in raw_clean):
+        # basic check: e.g. 2026-07-10T14:30:00Z or similar
+        # let's be more specific: look for a digit before and after T
+        if re.search(r"\d[T ]\d", raw_clean):
+            return raw_clean
     return None
 
 def _parse_float(raw: Optional[str]) -> Optional[float]:
