@@ -21,7 +21,7 @@ def fetch(url: str, cookie_str: str = "") -> MockResponse:
     if match:
         cnpj, ano, seq = match.groups()
         api_url = f"https://pncp.gov.br/api/consulta/v1/orgaos/{cnpj}/compras/{ano}/{seq}"
-        items_url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens?pagina=1&tamanhoPagina=100"
+        items_url = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj}/compras/{ano}/{seq}/itens?pagina=1&tamanhoPagina=5000"
         
         r_compra = httpx.get(api_url, headers=headers, timeout=30)
         if r_compra.status_code != 200:
