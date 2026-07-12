@@ -26,6 +26,20 @@ const DOMAIN_REGISTRY = [
     allFrames: false,
     runAt: "document_idle",
   },
+  {
+    id: "pncp",
+    js: ["parsers/pncp_parser.js"],
+    matches: ["*://*.pncp.gov.br/app/editais", "*://*.pncp.gov.br/app/editais?*", "*://*.pncp.gov.br/app/editais#*"],
+    allFrames: false,
+    runAt: "document_idle",
+  },
+  {
+    id: "pncp_detail",
+    js: ["parsers/pncp_detail_parser.js"],
+    matches: ["*://*.pncp.gov.br/app/editais/*/*"],
+    allFrames: false,
+    runAt: "document_idle",
+  },
 ];
 
 // Reconcile o registro de content scripts com DOMAIN_REGISTRY:

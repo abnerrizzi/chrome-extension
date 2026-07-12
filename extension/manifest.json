@@ -13,7 +13,8 @@
   "host_permissions": [
     "*://*.olx.com.br/*",
     "*://*.auctions.example/*",
-    "*://*.linkedin.com/*"
+    "*://*.linkedin.com/*",
+    "*://*.pncp.gov.br/*"
   ],
   "optional_host_permissions": [
     "http://*/*",
@@ -53,6 +54,14 @@
     {
       "resources": ["parsers/linkedin_parser.js"],
       "matches": ["*://*.linkedin.com/*"]
+    },
+    {
+      "resources": ["parsers/pncp_parser.js"],
+      "matches": ["*://*.pncp.gov.br/*"]
+    },
+    {
+      "resources": ["parsers/pncp_detail_parser.js"],
+      "matches": ["*://*.pncp.gov.br/*"]
     }
   ]
 }

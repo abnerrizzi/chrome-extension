@@ -1,5 +1,5 @@
 const DEFAULT_API_URL = "http://localhost:8000";
-const KNOWN_DOMAINS = ["olx", "auctions", "linkedin", "linkedin_detail"];
+const KNOWN_DOMAINS = ["olx", "auctions", "linkedin", "linkedin_detail", "pncp", "pncp_detail"];
 
 const $count   = document.getElementById("m-count");
 const $domain  = document.getElementById("m-domain");
@@ -122,6 +122,21 @@ function previewFields(domain, item) {
       price: item.seniority || "",
       meta:  [item.employment_type, item.applicants_raw || item.applicants]
                .filter(Boolean).join(" · "),
+    };
+  }
+  if (domain === "pncp") {
+    return {
+      title: item.numero_edital || item.pncp_id || "Edital",
+      price: item.modalidade || "",
+      meta:  [item.orgao, item.local].filter(Boolean).join(" · "),
+    };
+  }
+  if (domain === "pncp_detail") {
+    const priceStr = item.valor_total_estimado_raw ? "Est. R$ " + parseFloat(item.valor_total_estimado_raw).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : "";
+    return {
+      title: item.numero_edital || item.pncp_id || "Edital Detalhe",
+      price: priceStr || item.situacao || "",
+      meta:  [item.modalidade, item.orgao_razao_social].filter(Boolean).join(" · "),
     };
   }
   return {
