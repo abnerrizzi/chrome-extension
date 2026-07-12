@@ -1,5 +1,12 @@
 // Parser para a página de detalhes do PNCP (pncp.gov.br/app/editais/{cnpj}/{ano}/{seq})
-(function () {
+(async function () {
+  const logPrefs = await chrome.storage.sync.get({ consoleLogEnabled: true, consoleLogLevel: "info" });
+  const originalInfo = console.info;
+  const originalError = console.error; // Also wrapping error just to be safe, though usually errors are always logged, but let's keep consistent. Actually, just info and debug were requested.
+  const originalDebug = console.debug;
+  console.info = (...args) => { if (logPrefs.consoleLogEnabled) originalInfo.apply(console, args); };
+  console.debug = (...args) => { if (logPrefs.consoleLogEnabled && logPrefs.consoleLogLevel === 'debug') originalDebug.apply(console, args); };
+
   const path = window.location.pathname;
   const match = path.match(/\/editais\/(\d+)\/(\d+)\/(\d+)/);
   if (!match) return;

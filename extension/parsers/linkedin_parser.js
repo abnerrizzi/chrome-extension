@@ -21,7 +21,13 @@
 //    captura logada real. Cada campo degrada para null (nunca lança). Validar e
 //    corrigir esta tabela com uma captura logada antes de confiar nos dados.
 
-(function () {
+(async function () {
+  const logPrefs = await chrome.storage.sync.get({ consoleLogEnabled: true, consoleLogLevel: "info" });
+  const originalInfo = console.info;
+  const originalDebug = console.debug;
+  console.info = (...args) => { if (logPrefs.consoleLogEnabled) originalInfo.apply(console, args); };
+  console.debug = (...args) => { if (logPrefs.consoleLogEnabled && logPrefs.consoleLogLevel === 'debug') originalDebug.apply(console, args); };
+
   const KEY = "__linkedinParserState";
 
   // Re-injeção na mesma página (pushState): estado já existe → só re-parseia,

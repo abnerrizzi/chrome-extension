@@ -1,5 +1,11 @@
 // Parser para a página de listagem do PNCP (pncp.gov.br/app/editais)
-(function () {
+(async function () {
+  const logPrefs = await chrome.storage.sync.get({ consoleLogEnabled: true, consoleLogLevel: "info" });
+  const originalInfo = console.info;
+  const originalDebug = console.debug;
+  console.info = (...args) => { if (logPrefs.consoleLogEnabled) originalInfo.apply(console, args); };
+  console.debug = (...args) => { if (logPrefs.consoleLogEnabled && logPrefs.consoleLogLevel === 'debug') originalDebug.apply(console, args); };
+
   let lastHash = "";
   runOnce();
 
