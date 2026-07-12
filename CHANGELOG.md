@@ -11,6 +11,22 @@ Liquibase changeset id (e.g. `olx-004`).
 ## [Unreleased]
 
 ### Added
+- **Popup tabbed UI** (`items` / `response` / `info`) — referência em
+  `extension/design/B_tabbed.html`. A resposta da API deixa de aparecer
+  inline abaixo do preview e migra para uma aba dedicada; os metadados
+  (`domain`, `tab`, `endpoint`, `configurar`) consolidam em **info**. O badge
+  de itens vive na própria aba `items`. A aba `response` ganha um indicador
+  (`badge dot`) quando há resposta nova e fica `aria-disabled` enquanto não
+  houve POST. O popup agora lê os dois slots de sessão (`tab:<id>` e
+  `tab:<id>:detail`) — páginas isoladas de detalhe LinkedIn (`/jobs/view/NNN`)
+  surgem na aba `items` em vez de mostrar "no parser matched".
+- **Auto-send por site** — o toggle global `autoSend` vira o mapa
+  `autoSendDomains: Record<string, boolean>` em `chrome.storage.sync`. A
+  seção `site` mostra o host atual e o toggle é **escondido** em abas sem
+  parser registrado (`data-match="false"`). Migração legacy: na primeira
+  abertura do popup após upgrade, se a chave `autoSend` boolean existir, ela
+  é replicada em todos os domínios conhecidos e removida.
+
 - **Backend SQLite alternativo** ao Postgres, escolhido pelo scheme do
   `DATABASE_URL` (`postgresql://…` vs `sqlite:///…`). Shim de dialeto em
   `api/app/core/db.py` traduz placeholders, `ON CONFLICT` e `RETURNING/lastrowid`.
@@ -49,6 +65,9 @@ Liquibase changeset id (e.g. `olx-004`).
 - `extension/background.js` — domínios `*_detail` gravam em `tab:<id>:detail`
   (slot separado), não alteram o badge e têm dedupe de auto-send por domínio; o
   cleanup ao fechar a aba remove todas as chaves `tab:<id>*`.
+- `extension/background.js → autoSendIfEnabled` consulta
+  `autoSendDomains[domain]` (per-site, novo schema 0.5.0) com fallback para o
+  boolean legado durante o upgrade.
 
 ## [0.3.7] — 2026-05-27
 

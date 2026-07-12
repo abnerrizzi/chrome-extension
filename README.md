@@ -77,7 +77,7 @@ docker compose exec db psql -U app scraper_dev                    # Postgres: ps
 sqlite3 data/scraper.db                                           # SQLite: shell interativo
 
 docker compose logs -f api                                        # tail da API
-make down                                                         # para tudo (todos os perfis)
+make stop                                                         # para tudo (todos os perfis)
 docker compose --profile postgres down -v                         # para Postgres e apaga volumes
 ```
 

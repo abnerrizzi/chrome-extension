@@ -1,29 +1,50 @@
 const DEFAULT_API_URL = "http://localhost:8000";
+const KNOWN_DOMAINS = ["olx", "auctions", "linkedin", "linkedin_detail"];
 
 const $count   = document.getElementById("m-count");
 const $domain  = document.getElementById("m-domain");
 const $tab     = document.getElementById("m-tab");
+const $version = document.getElementById("m-version");
 const $statusPill = document.getElementById("status-pill");
 const $apiLabel   = document.getElementById("api-label");
 
-const $previewSection = document.getElementById("preview-section");
-const $previewAux     = document.getElementById("preview-aux");
-const $itemsList      = document.getElementById("items-list");
+const $itemsList    = document.getElementById("items-list");
+const $itemsEmpty   = document.getElementById("items-empty");
+const $previewAux   = document.getElementById("preview-aux");
 
-const $resultSection = document.getElementById("result-section");
-const $resultTitle   = document.getElementById("result-title");
-const $resultAux     = document.getElementById("result-aux");
-const $resTag        = document.getElementById("res-tag");
-const $resMsg        = document.getElementById("res-msg");
-const $resDetail     = document.getElementById("res-detail");
+const $resultTitle = document.getElementById("result-title");
+const $resultAux   = document.getElementById("result-aux");
+const $resTag      = document.getElementById("res-tag");
+const $resMsg      = document.getElementById("res-msg");
+const $resDetail   = document.getElementById("res-detail");
+const $resultBody  = document.getElementById("result-body");
+const $resultEmpty = document.getElementById("result-empty");
 
 const $send         = document.getElementById("send");
 const $endpointPath = document.getElementById("endpoint-path");
 
+const $siteSection = document.getElementById("site-section");
+const $siteHost    = document.getElementById("site-host");
+const $autosendBtn = document.getElementById("autosend-toggle");
+
+const $tabItems    = document.getElementById("tab-items");
+const $tabResponse = document.getElementById("tab-response");
+const $tabInfo     = document.getElementById("tab-info");
+const $responseDot = document.getElementById("response-dot");
+const $panelItems    = document.getElementById("panel-items");
+const $panelResponse = document.getElementById("panel-response");
+const $panelInfo     = document.getElementById("panel-info");
+const TABS = [
+  [$tabItems,    $panelItems],
+  [$tabResponse, $panelResponse],
+  [$tabInfo,     $panelInfo],
+];
+
 const MAX_PREVIEW = 8;
 
 const $hdrVer = document.getElementById("hdr-ver");
-$hdrVer.textContent = `v${chrome.runtime.getManifest().version}`;
+const VERSION_TEXT = `v${chrome.runtime.getManifest().version}`;
+for (const el of [$hdrVer, $version]) el.textContent = VERSION_TEXT;
 
 async function currentTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -35,13 +56,25 @@ async function getApiBase() {
   return apiUrl.replace(/\/+$/, "");
 }
 
-async function getAutoSend() {
-  const { autoSend } = await chrome.storage.sync.get({ autoSend: false });
-  return !!autoSend;
+// One-shot migration: legacy `autoSend: boolean` → `autoSendDomains: Record<string, boolean>`.
+// Returns the current map (after migration if it ran), so callers can avoid a second read.
+async function ensureAutoSendMigration() {
+  const stored = await chrome.storage.sync.get(["autoSend", "autoSendDomains"]);
+  const existing = stored.autoSendDomains || {};
+  if (stored.autoSend === undefined) return existing;
+  const legacyOn = stored.autoSend === true;
+  const seeded = Object.fromEntries(KNOWN_DOMAINS.map((d) => [d, legacyOn]));
+  const next = { ...seeded, ...existing }; // existing entries win over the legacy seed
+  await chrome.storage.sync.set({ autoSendDomains: next });
+  await chrome.storage.sync.remove("autoSend");
+  return next;
 }
 
-async function setAutoSend(on) {
-  await chrome.storage.sync.set({ autoSend: !!on });
+async function setAutoSendForDomain(domain, on) {
+  const { autoSendDomains } = await chrome.storage.sync.get({ autoSendDomains: {} });
+  const map = autoSendDomains || {};
+  map[domain] = !!on;
+  await chrome.storage.sync.set({ autoSendDomains: map });
 }
 
 function setStatus(state, label) {
@@ -91,7 +124,6 @@ function previewFields(domain, item) {
                .filter(Boolean).join(" · "),
     };
   }
-  // default
   return {
     title: item.title || "",
     price: item.price_raw || "",
@@ -125,28 +157,83 @@ function renderItems(domain, items) {
     : `${items.length}`;
 }
 
-async function load() {
-  const tab = await currentTab();
-  $tab.textContent = tab ? `#${tab.id}` : "—";
+function setItemsCount(n) {
+  $count.textContent = String(n);
+  $tabItems.setAttribute("aria-label", `items, ${n}`);
+}
 
-  const base = await getApiBase();
+function stripScheme(url) {
+  return url.replace(/^https?:\/\//, "");
+}
+
+function hostFromTab(tab) {
+  if (!tab || !tab.url) return "";
+  try { return new URL(tab.url).host; } catch { return ""; }
+}
+
+function switchTab(name) {
+  const target = TABS.find(([btn]) => btn.dataset.tab === name);
+  if (!target || target[0].getAttribute("aria-disabled") === "true") return;
+  for (const [btn, panel] of TABS) {
+    const active = btn.dataset.tab === name;
+    btn.setAttribute("aria-selected", active ? "true" : "false");
+    panel.hidden = !active;
+  }
+  if (name === "response") $responseDot.hidden = true;
+}
+
+function renderSiteSection(data, tab, autoSendMap) {
+  if (!data || !data.domain) {
+    $siteSection.dataset.match = "false";
+    return;
+  }
+  $siteSection.dataset.match = "true";
+  $siteHost.textContent = hostFromTab(tab) || data.domain;
+  $autosendBtn.setAttribute("aria-checked", autoSendMap[data.domain] ? "true" : "false");
+}
+
+async function load() {
+  // Independent IO — fan out then merge.
+  const [autoSendMap, tab, base] = await Promise.all([
+    ensureAutoSendMigration(),
+    currentTab(),
+    getApiBase(),
+  ]);
+
+  $tab.textContent = tab ? `#${tab.id}` : "—";
   $endpointPath.textContent = `${stripScheme(base)}/api/v1/ingest`;
   pingApi(base);
 
-  if (!tab) return;
-  const key = `tab:${tab.id}`;
-  const data = (await chrome.storage.session.get(key))[key];
+  if (!tab) {
+    renderSiteSection(null, null, autoSendMap);
+    return;
+  }
+  // Lê os dois slots: `tab:<id>` (lista) e `tab:<id>:detail` (detalhe enriquecido).
+  // Lista domina quando ambos existem — mesma precedência que `background.js`
+  // aplica para o badge — para que /jobs/search/?currentJobId=NNN continue
+  // mostrando a lista. Páginas puras de detalhe (/jobs/view/NNN) caem no slot
+  // de detalhe e usam a mesma pipeline de items/send.
+  const listKey = `tab:${tab.id}`;
+  const detailKey = `tab:${tab.id}:detail`;
+  const stored = await chrome.storage.session.get([listKey, detailKey]);
+  const data = stored[listKey] || stored[detailKey];
+
+  renderSiteSection(data, tab, autoSendMap);
+
   if (!data || !data.count) {
     $domain.textContent = "—";
+    $itemsEmpty.hidden = false;
     return;
   }
 
   $domain.textContent = data.domain;
-  $count.textContent = String(data.count);
+  setItemsCount(data.count);
 
   if (data.items && data.items.length) {
-    $previewSection.hidden = false;
     renderItems(data.domain, data.items);
+    $itemsEmpty.hidden = true;
+  } else {
+    $itemsEmpty.hidden = false;
   }
 
   $send.disabled = data.count === 0;
@@ -156,12 +243,7 @@ async function load() {
   });
 }
 
-function stripScheme(url) {
-  return url.replace(/^https?:\/\//, "");
-}
-
 function showResult(httpStatus, body) {
-  $resultSection.hidden = false;
   const ok      = httpStatus >= 200 && httpStatus < 300;
   const persisted = !!(body && body.persisted);
   const errCount  = body && Array.isArray(body.errors) ? body.errors.length : 0;
@@ -201,6 +283,13 @@ function showResult(httpStatus, body) {
     li.append(dk, dv);
     $resDetail.appendChild(li);
   }
+
+  $tabResponse.removeAttribute("aria-disabled");
+  $resultBody.hidden = false;
+  $resultEmpty.hidden = true;
+  if ($tabResponse.getAttribute("aria-selected") !== "true") {
+    $responseDot.hidden = false;
+  }
 }
 
 $send.addEventListener("click", async () => {
@@ -228,21 +317,25 @@ document.getElementById("open-options").addEventListener("click", (e) => {
   chrome.runtime.openOptionsPage();
 });
 
-async function initAutoSendToggle() {
-  const btn = document.getElementById("autosend-toggle");
-  const state = document.getElementById("autosend-state");
-  if (!btn) return;
-  const render = (on) => {
-    btn.setAttribute("aria-checked", on ? "true" : "false");
-    state.textContent = on ? "enabled" : "disabled";
-  };
-  render(await getAutoSend());
-  btn.addEventListener("click", async () => {
-    const next = btn.getAttribute("aria-checked") !== "true";
-    render(next);
-    await setAutoSend(next);
-  });
+for (const [btn] of TABS) {
+  btn.addEventListener("click", () => switchTab(btn.dataset.tab));
 }
 
-initAutoSendToggle();
+// O domínio é resolvido a cada clique a partir do storage da aba ativa, para
+// que mudanças de aba no underlying browser (popup persistente em alguns
+// SOs) não façam a gravação cair no domínio errado.
+$autosendBtn.addEventListener("click", async () => {
+  const tab = await currentTab();
+  if (!tab) return;
+  const listKey = `tab:${tab.id}`;
+  const detailKey = `tab:${tab.id}:detail`;
+  const stored = await chrome.storage.session.get([listKey, detailKey]);
+  const data = stored[listKey] || stored[detailKey];
+  const domain = data && data.domain;
+  if (!domain) return;
+  const next = $autosendBtn.getAttribute("aria-checked") !== "true";
+  $autosendBtn.setAttribute("aria-checked", next ? "true" : "false");
+  await setAutoSendForDomain(domain, next);
+});
+
 load();

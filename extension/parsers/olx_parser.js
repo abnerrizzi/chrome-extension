@@ -1,66 +1,49 @@
-// Parser OLX (imóveis / casas) baseado em __NEXT_DATA__.
-// Estrutura confirmada via inspeção de uma página real de busca:
-//   props.pageProps.ads[]
-//     subject, title, priceValue ("R$ 2.600.000"), oldPrice
-//     listId (int), url, friendlyUrl
-//     categoryName ("Casas"), category
-//     origListTime / date (unix epoch SEGUNDOS)
-//     images[].original, images[].originalWebp
-//     locationDetails {municipality, neighbourhood, uf, ddd}
-//     properties[] {name, label, value}
-//       names úteis: size, rooms, bathrooms, garage_spaces, iptu, condominio,
-//                    category, real_estate_type ("Venda - casa em ...",
-//                                                 "Aluguel - casa em ...")
-//
-// Módulos: hoje filtra apenas anúncios de **venda** ou **aluguel** de casas
-// (kind = "venda" | "aluguel"). Demais (temporada, troca etc.) são descartados.
-//
+// Parser OLX (imóveis / casas) atualizado para o novo layout (DOM Parser).
+// A OLX migrou para o Next.js App Router, removendo o __NEXT_DATA__.
+// Agora extraímos os dados diretamente dos AdCards no HTML.
+
 (function () {
+  let lastHash = "";
   runOnce();
 
-  // Re-executa o parser sempre que o conteúdo de __NEXT_DATA__ mudar.
-  // OBS: no OLX o Next.js raramente substitui o script no client (paginação
-  // SPA usa pushState e re-injeção via webNavigation cobre isso). Mas o
-  // observer existe para o caso de re-hidratação real.
-  const script = document.getElementById("__NEXT_DATA__");
-  if (script) {
-    const obs = new MutationObserver(() => runOnce());
-    obs.observe(script, { childList: true, characterData: true, subtree: true });
-  }
+  // Re-executa o parser debounced quando o DOM mudar (ex: scroll infinito, navegação SPA)
+  let timeout = null;
+  const observer = new MutationObserver(() => {
+    if (timeout) clearTimeout(timeout);
+    timeout = setTimeout(runOnce, 800);
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
 
   // ---------- main ----------
 
   function runOnce() {
-    const data = readNextData();
-    if (!data) {
-      sendCount(0, [], "__NEXT_DATA__ ausente");
+    // Seletores dos cards de anúncio no novo layout
+    const cards = Array.from(document.querySelectorAll('section.olx-adcard, div[data-ds-component="DS-AdCard"], a[data-ds-component="DS-AdCard"]'));
+    if (cards.length === 0) {
+      sendCount(0, [], "nenhum adcard encontrado no DOM");
       return;
     }
 
-    const ads = getPath(data, "props.pageProps.ads");
-    if (!Array.isArray(ads)) {
-      console.warn("[olx_parser] props.pageProps.ads não é array. Top keys:", Object.keys(data.props?.pageProps || {}));
-      sendCount(0, [], "ads array não encontrado");
-      return;
+    const itemsMap = new Map();
+    for (const card of cards) {
+      const item = toItem(card);
+      if (item && isVendaOuAluguel(item) && !itemsMap.has(item.external_id)) {
+        itemsMap.set(item.external_id, item);
+      }
     }
-    console.info(`[olx_parser] ${ads.length} ads na página`);
 
-    const items = ads.map(toItem).filter(Boolean).filter(isVendaOuAluguel);
+    const items = Array.from(itemsMap.values());
+    const currentHash = items.map(i => i.external_id).join(',');
+    
+    // Evitar spam de mensagens se os anúncios não mudaram
+    if (currentHash === lastHash && items.length > 0) return;
+    lastHash = currentHash;
+
+    console.info(`[olx_parser] ${items.length} ads parseados via DOM`);
     sendCount(items.length, items);
   }
 
   // ---------- helpers ----------
-
-  function readNextData() {
-    const el = document.getElementById("__NEXT_DATA__");
-    if (!el) return null;
-    try { return JSON.parse(el.textContent); }
-    catch (e) { console.error("[olx_parser] JSON.parse falhou:", e); return null; }
-  }
-
-  function getPath(obj, path) {
-    return path.split(".").reduce((o, k) => (o == null ? o : o[k]), obj);
-  }
 
   function sendCount(count, items, debug) {
     const msg = { type: "DOM_COUNT", domain: "olx", count, items };
@@ -68,91 +51,108 @@
     chrome.runtime.sendMessage(msg);
   }
 
-  function toItem(ad) {
-    if (!ad || typeof ad !== "object") return null;
-    const id = ad.listId ?? ad.id ?? null;
-    const url = ad.url || ad.friendlyUrl || null;
-    const title = ad.subject || ad.title || null;
-    if (!title || !url || id == null) return null;
+  function toItem(el) {
+    const linkEl = el.tagName === 'A' ? el : el.querySelector('a[data-testid="adcard-link"], a.olx-adcard__link');
+    if (!linkEl) return null;
 
-    const ld = ad.locationDetails || {};
-    const dateRaw = ad.origListTime ?? ad.date;
-    const realEstateTypeRaw = findProp(ad.properties, "real_estate_type");
-    const categoryRaw = findProp(ad.properties, "category");
+    const url = linkEl.href;
+    if (!url) return null;
+
+    const idMatch = url.match(/-(\d+)(?:\?|$)/);
+    const id = idMatch ? idMatch[1] : null;
+    if (!id) return null;
+
+    const titleEl = el.querySelector('h2');
+    const title = titleEl ? titleEl.textContent.trim() : linkEl.title;
+
+    const priceEl = el.querySelector('.olx-adcard__price, h3');
+    const price_raw = priceEl ? priceEl.textContent.trim() : null;
+
+    const locEl = el.querySelector('.olx-adcard__location');
+    const location = locEl ? locEl.textContent.trim() : null;
+
+    const dateEl = el.querySelector('.olx-adcard__date');
+    const date_raw = dateEl ? dateEl.textContent.trim() : null;
+
+    const imgEl = el.querySelector('picture img');
+    const image_url = imgEl ? imgEl.src : null;
+
+    let bedrooms_raw = null;
+    let bathrooms_raw = null;
+    let garage_spaces_raw = null;
+    let area_raw = null;
+
+    // Extrair detalhes por aria-label ou texto
+    const details = el.querySelectorAll('.olx-adcard__detail');
+    for (const det of details) {
+      const label = (det.getAttribute('aria-label') || "").toLowerCase();
+      const text = det.textContent.trim();
+      if (label.includes('quarto') || text.includes('quarto')) bedrooms_raw = text;
+      else if (label.includes('banheiro') || text.includes('banheiro')) bathrooms_raw = text;
+      else if (label.includes('vaga') || text.includes('vaga')) garage_spaces_raw = text;
+      else if (label.includes('metro') || text.includes('m²')) area_raw = text;
+    }
+
+    // IPTU / Condomínio
+    let iptu_raw = null;
+    const priceInfos = el.querySelectorAll('.olx-adcard__price-info');
+    for (const info of priceInfos) {
+      const text = info.textContent.toLowerCase();
+      if (text.includes('iptu')) iptu_raw = info.textContent.replace(/iptu/i, '').trim();
+    }
+
+    // Quebrar localização (Cidade, Bairro)
+    let city_raw = null;
+    let neighbourhood = null;
+    if (location) {
+      const parts = location.split(',').map(s => s.trim());
+      if (parts.length >= 2) {
+        city_raw = parts[0];
+        neighbourhood = parts[1];
+      } else {
+        city_raw = location;
+      }
+    }
 
     return {
       external_id: String(id),
       title: String(title),
       url: String(url),
-      price_raw: ad.priceValue || null,
-      listing_kind: ad.categoryName || ad.category || null,
-      // location composta — mantida pra compat com popup/preview.
-      location: formatLocation(ad),
-      neighbourhood: ld.neighbourhood || null,
-      city_raw: ld.municipality || null,
-      state_raw: ld.uf || null,
-      category_raw: categoryRaw,
-      real_estate_type_raw: realEstateTypeRaw,
-      kind: kindFromRealEstateType(realEstateTypeRaw)
-          || kindFromTitleOrUrl(title, url),
-      // schema OLX define `date_raw` como string; origListTime vem como int.
-      date_raw: dateRaw != null ? String(dateRaw) : null,
-      image_url: pickImage(ad),
-      iptu_raw: findProp(ad.properties, "iptu"),
-      bedrooms_raw: findProp(ad.properties, "rooms"),
-      bathrooms_raw: findProp(ad.properties, "bathrooms"),
-      garage_spaces_raw: findProp(ad.properties, "garage_spaces"),
-      area_raw: findProp(ad.properties, "size"),
+      price_raw: price_raw,
+      listing_kind: null,
+      location: location,
+      neighbourhood: neighbourhood,
+      city_raw: city_raw,
+      state_raw: null,
+      category_raw: null,
+      real_estate_type_raw: null,
+      kind: kindFromTitleOrUrl(title, url),
+      date_raw: date_raw,
+      image_url: image_url,
+      iptu_raw: iptu_raw,
+      bedrooms_raw: bedrooms_raw,
+      bathrooms_raw: bathrooms_raw,
+      garage_spaces_raw: garage_spaces_raw,
+      area_raw: area_raw,
     };
-  }
-
-  function formatLocation(ad) {
-    const ld = ad.locationDetails;
-    if (ld && (ld.neighbourhood || ld.municipality)) {
-      return [ld.neighbourhood, ld.municipality, ld.uf].filter(Boolean).join(", ");
-    }
-    return ad.location || null;
-  }
-
-  function pickImage(ad) {
-    const imgs = ad.images;
-    if (!Array.isArray(imgs) || imgs.length === 0) return ad.thumbnail || null;
-    const first = imgs[0];
-    if (typeof first === "string") return first;
-    return first.originalWebp || first.original || first.medium || first.thumbnail || null;
-  }
-
-  function findProp(props, name) {
-    if (!Array.isArray(props)) return null;
-    const want = name.toLowerCase();
-    for (const p of props) {
-      if (p && String(p.name || "").toLowerCase() === want) {
-        return p.value != null ? String(p.value) : null;
-      }
-    }
-    return null;
   }
 
   function normalize(s) {
     if (!s) return "";
-    return String(s).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-  }
-
-  function kindFromRealEstateType(raw) {
-    if (!raw) return null;
-    // formato observado: "Venda - casa em condominio fechado",
-    //                    "Aluguel - casa em rua pública"
-    const prefix = normalize(raw).split("-")[0].trim();
-    if (prefix.startsWith("venda")) return "venda";
-    if (prefix.startsWith("aluguel") || prefix.startsWith("locacao")) return "aluguel";
-    return null;
+    return String(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   }
 
   function kindFromTitleOrUrl(title, url) {
     const t = normalize(title) + " " + normalize(url);
     if (/\b(aluguel|alugar|locacao|para alugar)\b/.test(t)) return "aluguel";
     if (/\b(venda|vender|a venda|comprar|compra)\b/.test(t)) return "venda";
-    return null;
+    
+    // Fallback olhando a URL da página atual de busca
+    const pageUrl = normalize(window.location.href);
+    if (pageUrl.includes('/venda/')) return "venda";
+    if (pageUrl.includes('/aluguel/')) return "aluguel";
+    
+    return "venda"; // Default para não perder o item caso a página misture
   }
 
   function isVendaOuAluguel(it) {

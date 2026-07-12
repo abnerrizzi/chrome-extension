@@ -45,7 +45,7 @@ sqlite3 data/scraper.db                         # shell SQLite
 docker compose up -d api                        # start API at :8000
 docker compose run --rm api pytest              # run all tests
 docker compose run --rm api pytest tests/test_ingest_dynamic.py::test_olx_house_payload_full_normalization
-make down                                       # para tudo de ambos os perfis (mantém binds ./data e ./data/pgdata)
+make stop                                       # para tudo de ambos os perfis (mantém binds ./data e ./data/pgdata)
 
 # Rodar pytest contra um backend específico (sobrescreve DATABASE_URL):
 docker compose run --rm -e DATABASE_URL=sqlite:////data/scraper.db -v "$(pwd)/data:/data" api pytest
