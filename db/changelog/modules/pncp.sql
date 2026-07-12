@@ -59,3 +59,18 @@ CREATE TABLE pncp_purchase_items (
 CREATE INDEX ix_pncp_purchase_items_purchase ON pncp_purchase_items(purchase_id);
 --rollback DROP INDEX IF EXISTS ix_pncp_purchase_items_purchase;
 --rollback DROP TABLE IF EXISTS pncp_purchase_items;
+
+--changeset claude:pncp-004-widen-varchar-columns
+--preconditions onFail:MARK_RAN onError:HALT
+--precondition-sql-check expectedResult:1 SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='pncp_items'
+ALTER TABLE pncp_items ALTER COLUMN numero_edital TYPE VARCHAR(256);
+ALTER TABLE pncp_items ALTER COLUMN modo_disputa TYPE VARCHAR(256);
+ALTER TABLE pncp_items ALTER COLUMN situacao TYPE VARCHAR(256);
+ALTER TABLE pncp_items ALTER COLUMN amparo_legal TYPE VARCHAR(512);
+ALTER TABLE pncp_purchase_items ALTER COLUMN situacao TYPE VARCHAR(256);
+--rollback ALTER TABLE pncp_items ALTER COLUMN numero_edital TYPE VARCHAR(64);
+--rollback ALTER TABLE pncp_items ALTER COLUMN modo_disputa TYPE VARCHAR(64);
+--rollback ALTER TABLE pncp_items ALTER COLUMN situacao TYPE VARCHAR(64);
+--rollback ALTER TABLE pncp_items ALTER COLUMN amparo_legal TYPE VARCHAR(128);
+--rollback ALTER TABLE pncp_purchase_items ALTER COLUMN situacao TYPE VARCHAR(64);
+

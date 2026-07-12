@@ -59,3 +59,10 @@ CREATE TABLE pncp_purchase_items (
 CREATE INDEX ix_pncp_purchase_items_purchase ON pncp_purchase_items(purchase_id);
 --rollback DROP INDEX IF EXISTS ix_pncp_purchase_items_purchase;
 --rollback DROP TABLE IF EXISTS pncp_purchase_items;
+
+--changeset claude:pncp-004-widen-varchar-columns
+--preconditions onFail:MARK_RAN onError:HALT
+--precondition-sql-check expectedResult:1 SELECT count(*) FROM sqlite_master WHERE type='table' AND name='pncp_items'
+SELECT 1;
+--rollback SELECT 1;
+
