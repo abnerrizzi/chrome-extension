@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PNCPItem",
+  "type": "object",
+  "required": ["external_id", "pncp_id"],
+  "properties": {
+    "external_id":            { "type": "string" },
+    "pncp_id":                { "type": "string" },
+    "numero_edital":          { "type": "string" },
+    "modalidade":             { "type": "string" },
+    "ultima_atualizacao_raw": { "type": "string" },
+    "orgao":                  { "type": "string" },
+    "local":                  { "type": "string" },
+    "objeto":                 { "type": "string" },
+    "url":                    { "type": "string" }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PNCPDetailItem",
+  "type": "object",
+  "required": ["external_id"],
+  "properties": {
+    "external_id":                     { "type": "string" },
+    "pncp_id":                         { "type": "string" },
+    "numero_edital":                   { "type": "string" },
+    "modalidade":                      { "type": "string" },
+    "modo_disputa":                    { "type": "string" },
+    "orgao_cnpj":                      { "type": "string" },
+    "orgao_razao_social":              { "type": "string" },
+    "municipio":                       { "type": "string" },
+    "uf":                              { "type": "string" },
+    "objeto":                          { "type": "string" },
+    "valor_total_estimado_raw":        { "type": ["string", "null"] },
+    "valor_total_homologado_raw":      { "type": ["string", "null"] },
+    "situacao":                        { "type": "string" },
+    "srp":                             { "type": "boolean" },
+    "amparo_legal":                    { "type": "string" },
+    "data_publicacao_pncp_raw":        { "type": "string" },
+    "data_abertura_proposta_raw":      { "type": "string" },
+    "data_encerramento_proposta_raw":  { "type": "string" },
+    "link_sistema_origem":             { "type": "string" },
+    "url":                             { "type": "string" }
+  }
+}
