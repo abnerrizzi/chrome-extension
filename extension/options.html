@@ -22,6 +22,20 @@
         <p class="hint">Sem barra no final. O endpoint <code>/api/v1/ingest</code> será derivado automaticamente.</p>
 
         <div class="row">
+          <label style="display: flex; align-items: center; gap: 8px;">
+            <input type="checkbox" id="consoleLogEnabled" />
+            Habilitar logs no console
+          </label>
+        </div>
+        <div class="row">
+          <label for="consoleLogLevel" style="margin-right: 8px;">Nível de Log:</label>
+          <select id="consoleLogLevel">
+            <option value="info">Info</option>
+            <option value="debug">Debug</option>
+          </select>
+        </div>
+
+        <div class="row">
           <button type="submit" id="save" class="primary">Salvar</button>
           <button type="button" id="test">Testar</button>
         </div>
