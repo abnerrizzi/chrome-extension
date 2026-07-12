@@ -72,4 +72,10 @@ SELECT 1;
 SELECT 1;
 --rollback SELECT 1;
 
-
+--changeset claude:pncp-006-purchase-items-raw-values
+--preconditions onFail:MARK_RAN onError:HALT
+--precondition-sql-check expectedResult:1 SELECT count(*) FROM sqlite_master WHERE type='table' AND name='pncp_purchase_items'
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM pragma_table_info('pncp_purchase_items') WHERE name='valor_unitario_estimado_raw'
+ALTER TABLE pncp_purchase_items ADD COLUMN valor_unitario_estimado_raw TEXT;
+ALTER TABLE pncp_purchase_items ADD COLUMN valor_total_raw TEXT;
+--rollback SELECT 1;

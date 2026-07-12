@@ -186,24 +186,24 @@ def _insert_items(cur, domain_id: str, session_id: int, items: list[dict]) -> No
                     "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
                     f"{on_conflict} "
                     "  session_id=EXCLUDED.session_id, "
-                    "  pncp_id=COALESCE(EXCLUDED.pncp_id, pncp_items.pncp_id), "
-                    "  numero_edital=COALESCE(EXCLUDED.numero_edital, pncp_items.numero_edital), "
-                    "  modalidade=COALESCE(EXCLUDED.modalidade, pncp_items.modalidade), "
-                    "  modo_disputa=COALESCE(EXCLUDED.modo_disputa, pncp_items.modo_disputa), "
-                    "  orgao_cnpj=COALESCE(EXCLUDED.orgao_cnpj, pncp_items.orgao_cnpj), "
-                    "  orgao_razao_social=COALESCE(EXCLUDED.orgao_razao_social, pncp_items.orgao_razao_social), "
-                    "  municipio=COALESCE(EXCLUDED.municipio, pncp_items.municipio), "
-                    "  uf=COALESCE(EXCLUDED.uf, pncp_items.uf), "
-                    "  objeto=COALESCE(EXCLUDED.objeto, pncp_items.objeto), "
-                    "  valor_total_estimado=COALESCE(EXCLUDED.valor_total_estimado, pncp_items.valor_total_estimado), "
-                    "  valor_total_homologado=COALESCE(EXCLUDED.valor_total_homologado, pncp_items.valor_total_homologado), "
-                    "  situacao=COALESCE(EXCLUDED.situacao, pncp_items.situacao), "
-                    "  srp=COALESCE(EXCLUDED.srp, pncp_items.srp), "
-                    "  amparo_legal=COALESCE(EXCLUDED.amparo_legal, pncp_items.amparo_legal), "
-                    "  data_publicacao_pncp=COALESCE(EXCLUDED.data_publicacao_pncp, pncp_items.data_publicacao_pncp), "
-                    "  data_abertura_proposta=COALESCE(EXCLUDED.data_abertura_proposta, pncp_items.data_abertura_proposta), "
-                    "  data_encerramento_proposta=COALESCE(EXCLUDED.data_encerramento_proposta, pncp_items.data_encerramento_proposta), "
-                    "  link_sistema_origem=COALESCE(EXCLUDED.link_sistema_origem, pncp_items.link_sistema_origem), "
+                    "  pncp_id=EXCLUDED.pncp_id, "
+                    "  numero_edital=EXCLUDED.numero_edital, "
+                    "  modalidade=EXCLUDED.modalidade, "
+                    "  modo_disputa=EXCLUDED.modo_disputa, "
+                    "  orgao_cnpj=EXCLUDED.orgao_cnpj, "
+                    "  orgao_razao_social=EXCLUDED.orgao_razao_social, "
+                    "  municipio=EXCLUDED.municipio, "
+                    "  uf=EXCLUDED.uf, "
+                    "  objeto=EXCLUDED.objeto, "
+                    "  valor_total_estimado=EXCLUDED.valor_total_estimado, "
+                    "  valor_total_homologado=EXCLUDED.valor_total_homologado, "
+                    "  situacao=EXCLUDED.situacao, "
+                    "  srp=EXCLUDED.srp, "
+                    "  amparo_legal=EXCLUDED.amparo_legal, "
+                    "  data_publicacao_pncp=EXCLUDED.data_publicacao_pncp, "
+                    "  data_abertura_proposta=EXCLUDED.data_abertura_proposta, "
+                    "  data_encerramento_proposta=EXCLUDED.data_encerramento_proposta, "
+                    "  link_sistema_origem=EXCLUDED.link_sistema_origem, "
                     "  url=EXCLUDED.url"
                 ),
                 (
@@ -233,8 +233,10 @@ def _insert_items(cur, domain_id: str, session_id: int, items: list[dict]) -> No
                     db.q(
                         "INSERT INTO pncp_purchase_items ("
                         "  purchase_id, numero_item, descricao, material_ou_servico, "
-                        "  valor_unitario_estimado, valor_total, quantidade, unidade_medida, situacao"
-                        ") VALUES (?,?,?,?,?,?,?,?,?)"
+                        "  valor_unitario_estimado, valor_unitario_estimado_raw, "
+                        "  valor_total, valor_total_raw, "
+                        "  quantidade, unidade_medida, situacao"
+                        ") VALUES (?,?,?,?,?,?,?,?,?,?,?)"
                     ),
                     [
                         (
@@ -243,7 +245,9 @@ def _insert_items(cur, domain_id: str, session_id: int, items: list[dict]) -> No
                             pi.get("descricao"),
                             pi.get("material_ou_servico"),
                             pi.get("valor_unitario_estimado"),
+                            pi.get("valor_unitario_estimado_raw"),
                             pi.get("valor_total"),
+                            pi.get("valor_total_raw"),
                             pi.get("quantidade"),
                             pi.get("unidade_medida"),
                             pi.get("situacao")

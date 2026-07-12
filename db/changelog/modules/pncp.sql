@@ -94,4 +94,11 @@ ALTER TABLE pncp_purchase_items ALTER COLUMN situacao TYPE TEXT;
 --rollback ALTER TABLE pncp_items ALTER COLUMN municipio TYPE VARCHAR(128);
 --rollback ALTER TABLE pncp_purchase_items ALTER COLUMN situacao TYPE VARCHAR(256);
 
-
+--changeset claude:pncp-006-purchase-items-raw-values
+--preconditions onFail:MARK_RAN onError:HALT
+--precondition-sql-check expectedResult:1 SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='pncp_purchase_items'
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='pncp_purchase_items' AND column_name='valor_unitario_estimado_raw'
+ALTER TABLE pncp_purchase_items ADD COLUMN valor_unitario_estimado_raw TEXT;
+ALTER TABLE pncp_purchase_items ADD COLUMN valor_total_raw TEXT;
+--rollback ALTER TABLE pncp_purchase_items DROP COLUMN IF EXISTS valor_total_raw;
+--rollback ALTER TABLE pncp_purchase_items DROP COLUMN IF EXISTS valor_unitario_estimado_raw;

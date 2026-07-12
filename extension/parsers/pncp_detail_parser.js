@@ -19,6 +19,36 @@
 
   const itemsUrl = `${window.location.origin}/api/pncp/v1/orgaos/${cnpj}/compras/${ano}/${seq}/itens?pagina=1&tamanhoPagina=5000`;
 
+  /**
+   * Extrai os itens da tabela renderizada no DOM da página.
+   * Captura o texto exibido em cada célula, incluindo "Sigiloso" quando aplicável.
+   * Retorna um Map<numero_item, {valor_unitario_raw, valor_total_raw, quantidade_raw}>.
+   */
+  function extractDomItems() {
+    const domMap = new Map();
+    // A aba "Itens" é a pncp-tab ativa; as linhas ficam em datatable-body-row
+    const rows = document.querySelectorAll(
+      "pncp-tab datatable-body datatable-body-row"
+    );
+    rows.forEach(row => {
+      const cells = row.querySelectorAll("datatable-body-cell");
+      if (cells.length < 5) return;
+      const getCellText = (cell) => {
+        const span = cell.querySelector("span[title], span.ng-star-inserted");
+        return span ? span.textContent.trim() : cell.textContent.trim();
+      };
+      const numeroRaw = getCellText(cells[0]);
+      const numero = parseInt(numeroRaw, 10);
+      if (isNaN(numero)) return;
+      domMap.set(numero, {
+        valor_unitario_estimado_raw: getCellText(cells[3]),
+        valor_total_raw:             getCellText(cells[4]),
+        quantidade_raw:              getCellText(cells[2]),
+      });
+    });
+    return domMap;
+  }
+
   Promise.all([
     fetch(apiUrl).then(res => {
       if (!res.ok) throw new Error(`HTTP status ${res.status}`);
@@ -27,16 +57,36 @@
     fetch(itemsUrl).then(res => res.ok ? res.json() : [])
   ])
     .then(([data, itemsList]) => {
-      const itens = (itemsList || []).map(pi => ({
-        numero_item: Number(pi.numeroItem || 0),
-        descricao: String(pi.descricao || ""),
-        material_ou_servico: String(pi.materialOuServico || ""),
-        valor_unitario_estimado: pi.valorUnitarioEstimado != null ? Number(pi.valorUnitarioEstimado) : null,
-        valor_total: pi.valorTotal != null ? Number(pi.valorTotal) : null,
-        quantidade: pi.quantidade != null ? Number(pi.quantidade) : null,
-        unidade_medida: String(pi.unidadeMedida || "").trim(),
-        situacao: String(pi.situacaoCompraItemNome || pi.situacaoCompraItem || ""),
-      }));
+      // Extrai textos exibidos na página (captura "Sigiloso", valores formatados, etc.)
+      const domMap = extractDomItems();
+
+      const itens = (itemsList || []).map(pi => {
+        const num = Number(pi.numeroItem || 0);
+        const dom = domMap.get(num) || {};
+
+        // Valor numérico vindo da API (null quando sigiloso)
+        const valorUnitNum = pi.valorUnitarioEstimado != null ? Number(pi.valorUnitarioEstimado) : null;
+        const valorTotalNum = pi.valorTotal != null ? Number(pi.valorTotal) : null;
+
+        // Texto exibido na página (ex: "Sigiloso", ou o número formatado)
+        const valorUnitarioRaw = dom.valor_unitario_estimado_raw ||
+          (valorUnitNum != null ? String(valorUnitNum) : null);
+        const valorTotalRaw = dom.valor_total_raw ||
+          (valorTotalNum != null ? String(valorTotalNum) : null);
+
+        return {
+          numero_item:                 num,
+          descricao:                   String(pi.descricao || ""),
+          material_ou_servico:         String(pi.materialOuServico || ""),
+          valor_unitario_estimado:     valorUnitNum,
+          valor_unitario_estimado_raw: valorUnitarioRaw,
+          valor_total:                 valorTotalNum,
+          valor_total_raw:             valorTotalRaw,
+          quantidade:                  pi.quantidade != null ? Number(pi.quantidade) : null,
+          unidade_medida:              String(pi.unidadeMedida || "").trim(),
+          situacao:                    String(pi.situacaoCompraItemNome || pi.situacaoCompraItem || ""),
+        };
+      });
 
       const item = {
         external_id: String(data.numeroControlePNCP || `${cnpj}/${ano}/${seq}`),
