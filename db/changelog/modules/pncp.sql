@@ -74,3 +74,24 @@ ALTER TABLE pncp_purchase_items ALTER COLUMN situacao TYPE VARCHAR(256);
 --rollback ALTER TABLE pncp_items ALTER COLUMN amparo_legal TYPE VARCHAR(128);
 --rollback ALTER TABLE pncp_purchase_items ALTER COLUMN situacao TYPE VARCHAR(64);
 
+--changeset claude:pncp-005-use-text-types
+--preconditions onFail:MARK_RAN onError:HALT
+--precondition-sql-check expectedResult:1 SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='pncp_items'
+ALTER TABLE pncp_items ALTER COLUMN numero_edital TYPE TEXT;
+ALTER TABLE pncp_items ALTER COLUMN modo_disputa TYPE TEXT;
+ALTER TABLE pncp_items ALTER COLUMN situacao TYPE TEXT;
+ALTER TABLE pncp_items ALTER COLUMN amparo_legal TYPE TEXT;
+ALTER TABLE pncp_items ALTER COLUMN modalidade TYPE TEXT;
+ALTER TABLE pncp_items ALTER COLUMN orgao_razao_social TYPE TEXT;
+ALTER TABLE pncp_items ALTER COLUMN municipio TYPE TEXT;
+ALTER TABLE pncp_purchase_items ALTER COLUMN situacao TYPE TEXT;
+--rollback ALTER TABLE pncp_items ALTER COLUMN numero_edital TYPE VARCHAR(256);
+--rollback ALTER TABLE pncp_items ALTER COLUMN modo_disputa TYPE VARCHAR(256);
+--rollback ALTER TABLE pncp_items ALTER COLUMN situacao TYPE VARCHAR(256);
+--rollback ALTER TABLE pncp_items ALTER COLUMN amparo_legal TYPE VARCHAR(512);
+--rollback ALTER TABLE pncp_items ALTER COLUMN modalidade TYPE VARCHAR(128);
+--rollback ALTER TABLE pncp_items ALTER COLUMN orgao_razao_social TYPE VARCHAR(512);
+--rollback ALTER TABLE pncp_items ALTER COLUMN municipio TYPE VARCHAR(128);
+--rollback ALTER TABLE pncp_purchase_items ALTER COLUMN situacao TYPE VARCHAR(256);
+
+

@@ -66,3 +66,10 @@ CREATE INDEX ix_pncp_purchase_items_purchase ON pncp_purchase_items(purchase_id)
 SELECT 1;
 --rollback SELECT 1;
 
+--changeset claude:pncp-005-use-text-types
+--preconditions onFail:MARK_RAN onError:HALT
+--precondition-sql-check expectedResult:1 SELECT count(*) FROM sqlite_master WHERE type='table' AND name='pncp_items'
+SELECT 1;
+--rollback SELECT 1;
+
+
