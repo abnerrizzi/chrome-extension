@@ -36,7 +36,7 @@ const DOMAIN_REGISTRY = [
   {
     id: "pncp_detail",
     js: ["parsers/pncp_detail_parser.js"],
-    matches: ["*://*.pncp.gov.br/app/editais/*/*"],
+    matches: ["*://*.pncp.gov.br/app/editais/*/*/*"],
     allFrames: false,
     runAt: "document_idle",
   },
@@ -115,16 +115,18 @@ function urlMatchesDomain(url, domain) {
 // os content scripts registrados não rodam de novo. Re-injetamos manualmente.
 chrome.webNavigation.onHistoryStateUpdated.addListener(async (details) => {
   if (details.frameId !== 0) return;
-  const domain = DOMAIN_REGISTRY.find((d) => urlMatchesDomain(details.url, d));
-  if (!domain) return;
-  try {
-    await chrome.scripting.executeScript({
-      target: { tabId: details.tabId },
-      files: domain.js,
-    });
-  } catch (err) {
-    // Silenciar: pode falhar em URLs sem permissão de host ainda concedida.
-    console.debug("SPA re-inject skipped:", err.message);
+  const domains = DOMAIN_REGISTRY.filter((d) => urlMatchesDomain(details.url, d));
+  if (!domains.length) return;
+  for (const domain of domains) {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: details.tabId },
+        files: domain.js,
+      });
+    } catch (err) {
+      // Silenciar: pode falhar em URLs sem permissão de host ainda concedida.
+      console.debug("SPA re-inject skipped:", err.message);
+    }
   }
 });
 
