@@ -10,6 +10,8 @@ Liquibase changeset id (e.g. `olx-004`).
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-07-12
+
 ### Added
 - **Popup tabbed UI** (`items` / `response` / `info`) — referência em
   `extension/design/B_tabbed.html`. A resposta da API deixa de aparecer
