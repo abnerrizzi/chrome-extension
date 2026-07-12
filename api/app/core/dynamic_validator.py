@@ -24,6 +24,10 @@ _JSON_TYPE_MAP: dict[str, type] = {
 def _resolve_type(prop: dict) -> Any:
     """Converte um nó de propriedade JSON Schema em tipo Python."""
     t = prop.get("type", "string")
+    # JSON Schema allows "type" to be a list, e.g. ["string", "null"].
+    # Pick the first non-null concrete type from the list.
+    if isinstance(t, list):
+        t = next((x for x in t if x != "null"), "string")
     if t == "array":
         item_t = _resolve_type(prop.get("items", {"type": "string"}))
         return List[item_t]

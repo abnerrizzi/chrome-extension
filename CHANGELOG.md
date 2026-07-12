@@ -10,6 +10,15 @@ Liquibase changeset id (e.g. `olx-004`).
 
 ## [Unreleased]
 
+## [0.6.8] — 2026-07-12
+
+### Added
+- **Captura de valores Sigilosos no PNCP**: Parser `pncp_detail_parser.js` agora extrai os itens diretamente do DOM para capturar o texto exibido na tabela (permitindo obter o status de valor "Sigiloso" em editais com valores ocultados).
+- Novas colunas `valor_unitario_estimado_raw` e `valor_total_raw` (TEXT) em `pncp_purchase_items` para preservar o valor original de texto (changeset `pncp-006` para Postgres e SQLite).
+
+### Changed
+- **Sobrescrita de dados no PNCP**: O upsert do domínio `pncp_detail` agora sobrescreve todos os campos com as informações mais recentes da página, removendo o uso de `COALESCE` que preservava os dados antigos.
+
 ## [0.6.0] — 2026-07-12
 
 ### Added
