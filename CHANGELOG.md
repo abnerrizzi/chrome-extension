@@ -14,10 +14,13 @@ Liquibase changeset id (e.g. `olx-004`).
 
 ### Added
 - **Configuração de logs no console**: Opção para ligar/desligar logs no console local do navegador e alternar entre os níveis de verbosidade "info" e "debug".
+- **Unicidade de pncp_id**: Adicionado índice único para a coluna `pncp_id` na tabela `pncp_items` (changeset `pncp-007` para Postgres e SQLite).
 
 ### Fixed
 - **Navegação SPA do PNCP**: Corrigida a extração na página de detalhes do PNCP ao navegar de volta para o mesmo item (uso de MutationObserver para aguardar tabelas Angular e remoção de trava de URL).
 - **Slot de Popup para Detalhe**: Correção no popup que agora prioriza a aba de detalhes no PNCP e visualizações dedicadas, mesmo com o slot da lista ainda ativo na sessão.
+- **Extração de Campos do PNCP (Listagem)**: Correção na função `getFieldByLabel` no parser `pncp_parser.js` para não retornar strings vazias de elementos filhos aninhados (como `<strong>`). Isso restabelece a extração correta de `pncp_id`, `objeto`, `modalidade`, `orgao` e `local` a partir do DOM da listagem.
+- **Tratamento de Strings Vazias na Normalização**: Modificado o normalizador da API PNCP para mapear strings de texto vazias para `None` (`NULL` no DB), garantindo que atualizações da listagem não sobrescrevam via `COALESCE` os campos ricos inseridos previamente pela página de detalhes.
 
 ## [0.6.8] — 2026-07-12
 
