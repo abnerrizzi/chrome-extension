@@ -14,17 +14,45 @@
   const cnpj = match[1];
   const ano = match[2];
   const seq = match[3];
-
   const currentUrl = window.location.href;
-  if (window.__lastPncpDetailUrl === currentUrl) return;
-  window.__lastPncpDetailUrl = currentUrl;
 
-  const apiBase = window.location.origin + "/api/consulta";
-  const apiUrl = `${apiBase}/v1/orgaos/${cnpj}/compras/${ano}/${seq}`;
+  let apiDataCache = null;
+  let itemsListCache = null;
+  let isFetching = false;
+  let lastHash = "";
 
-  console.info(`[pncp_detail_parser] Buscando detalhes via API: ${cnpj}/${ano}/${seq}`);
+  function fetchApiData() {
+    if (apiDataCache || isFetching) return Promise.resolve();
+    isFetching = true;
+    const apiBase = window.location.origin + "/api/consulta";
+    const apiUrl = `${apiBase}/v1/orgaos/${cnpj}/compras/${ano}/${seq}`;
+    const itemsUrl = `${window.location.origin}/api/pncp/v1/orgaos/${cnpj}/compras/${ano}/${seq}/itens?pagina=1&tamanhoPagina=5000`;
+    console.info(`[pncp_detail_parser] Buscando detalhes via API: ${cnpj}/${ano}/${seq}`);
 
-  const itemsUrl = `${window.location.origin}/api/pncp/v1/orgaos/${cnpj}/compras/${ano}/${seq}/itens?pagina=1&tamanhoPagina=5000`;
+    return Promise.all([
+      fetch(apiUrl).then(res => {
+        if (!res.ok) throw new Error(`HTTP status ${res.status}`);
+        return res.json();
+      }),
+      fetch(itemsUrl).then(res => res.ok ? res.json() : [])
+    ]).then(([data, itemsList]) => {
+      apiDataCache = data;
+      itemsListCache = itemsList;
+      isFetching = false;
+    }).catch(err => {
+      console.error("[pncp_detail_parser] Erro ao buscar detalhes do edital:", err);
+      isFetching = false;
+    });
+  }
+
+  runOnce();
+
+  let timeout = null;
+  const observer = new MutationObserver(() => {
+    if (timeout) clearTimeout(timeout);
+    timeout = setTimeout(runOnce, 800);
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
 
   /**
    * Extrai os itens da tabela renderizada no DOM da página.
@@ -33,7 +61,6 @@
    */
   function extractDomItems() {
     const domMap = new Map();
-    // A aba "Itens" é a pncp-tab ativa; as linhas ficam em datatable-body-row
     const rows = document.querySelectorAll(
       "pncp-tab datatable-body datatable-body-row"
     );
@@ -56,77 +83,72 @@
     return domMap;
   }
 
-  Promise.all([
-    fetch(apiUrl).then(res => {
-      if (!res.ok) throw new Error(`HTTP status ${res.status}`);
-      return res.json();
-    }),
-    fetch(itemsUrl).then(res => res.ok ? res.json() : [])
-  ])
-    .then(([data, itemsList]) => {
-      // Extrai textos exibidos na página (captura "Sigiloso", valores formatados, etc.)
-      const domMap = extractDomItems();
+  async function runOnce() {
+    await fetchApiData();
+    if (!apiDataCache) return; // falhou na requisição
 
-      const itens = (itemsList || []).map(pi => {
-        const num = Number(pi.numeroItem || 0);
-        const dom = domMap.get(num) || {};
+    const domMap = extractDomItems();
 
-        // Valor numérico vindo da API (null quando sigiloso)
-        const valorUnitNum = pi.valorUnitarioEstimado != null ? Number(pi.valorUnitarioEstimado) : null;
-        const valorTotalNum = pi.valorTotal != null ? Number(pi.valorTotal) : null;
+    const itens = (itemsListCache || []).map(pi => {
+      const num = Number(pi.numeroItem || 0);
+      const dom = domMap.get(num) || {};
 
-        // Texto exibido na página (ex: "Sigiloso", ou o número formatado)
-        const valorUnitarioRaw = dom.valor_unitario_estimado_raw ||
-          (valorUnitNum != null ? String(valorUnitNum) : null);
-        const valorTotalRaw = dom.valor_total_raw ||
-          (valorTotalNum != null ? String(valorTotalNum) : null);
+      const valorUnitNum = pi.valorUnitarioEstimado != null ? Number(pi.valorUnitarioEstimado) : null;
+      const valorTotalNum = pi.valorTotal != null ? Number(pi.valorTotal) : null;
 
-        return {
-          numero_item:                 num,
-          descricao:                   String(pi.descricao || ""),
-          material_ou_servico:         String(pi.materialOuServico || ""),
-          valor_unitario_estimado:     valorUnitNum,
-          valor_unitario_estimado_raw: valorUnitarioRaw,
-          valor_total:                 valorTotalNum,
-          valor_total_raw:             valorTotalRaw,
-          quantidade:                  pi.quantidade != null ? Number(pi.quantidade) : null,
-          unidade_medida:              String(pi.unidadeMedida || "").trim(),
-          situacao:                    String(pi.situacaoCompraItemNome || pi.situacaoCompraItem || ""),
-        };
-      });
+      const valorUnitarioRaw = dom.valor_unitario_estimado_raw ||
+        (valorUnitNum != null ? String(valorUnitNum) : null);
+      const valorTotalRaw = dom.valor_total_raw ||
+        (valorTotalNum != null ? String(valorTotalNum) : null);
 
-      const item = {
-        external_id: String(data.numeroControlePNCP || `${cnpj}/${ano}/${seq}`),
-        pncp_id: String(data.numeroControlePNCP || ""),
-        numero_edital: data.numeroCompra && data.anoCompra ? `Edital nº ${data.numeroCompra}/${data.anoCompra}` : "",
-        modalidade: String(data.modalidadeNome || ""),
-        modo_disputa: String(data.modoDisputaNome || ""),
-        orgao_cnpj: String(data.orgaoEntidade?.cnpj || ""),
-        orgao_razao_social: String(data.orgaoEntidade?.razaoSocial || ""),
-        municipio: String(data.unidadeOrgao?.municipioNome || ""),
-        uf: String(data.unidadeOrgao?.ufSigla || ""),
-        objeto: String(data.objetoCompra || ""),
-        valor_total_estimado_raw: data.valorTotalEstimado != null ? String(data.valorTotalEstimado) : null,
-        valor_total_homologado_raw: data.valorTotalHomologado != null ? String(data.valorTotalHomologado) : null,
-        situacao: String(data.situacaoCompraNome || ""),
-        srp: data.srp === true,
-        amparo_legal: String(data.amparoLegal?.nome || ""),
-        data_publicacao_pncp_raw: String(data.dataPublicacaoPncp || ""),
-        data_abertura_proposta_raw: String(data.dataAberturaProposta || ""),
-        data_encerramento_proposta_raw: String(data.dataEncerramentoProposta || ""),
-        link_sistema_origem: String(data.linkSistemaOrigem || ""),
-        url: currentUrl,
-        itens: itens,
+      return {
+        numero_item:                 num,
+        descricao:                   String(pi.descricao || ""),
+        material_ou_servico:         String(pi.materialOuServico || ""),
+        valor_unitario_estimado:     valorUnitNum,
+        valor_unitario_estimado_raw: valorUnitarioRaw,
+        valor_total:                 valorTotalNum,
+        valor_total_raw:             valorTotalRaw,
+        quantidade:                  pi.quantidade != null ? Number(pi.quantidade) : null,
+        unidade_medida:              String(pi.unidadeMedida || "").trim(),
+        situacao:                    String(pi.situacaoCompraItemNome || pi.situacaoCompraItem || ""),
       };
-
-      chrome.runtime.sendMessage({
-        type: "DOM_COUNT",
-        domain: "pncp_detail",
-        count: 1,
-        items: [item]
-      });
-    })
-    .catch(err => {
-      console.error("[pncp_detail_parser] Erro ao buscar detalhes do edital:", err);
     });
+
+    const item = {
+      external_id: String(apiDataCache.numeroControlePNCP || `${cnpj}/${ano}/${seq}`),
+      pncp_id: String(apiDataCache.numeroControlePNCP || ""),
+      numero_edital: apiDataCache.numeroCompra && apiDataCache.anoCompra ? `Edital nº ${apiDataCache.numeroCompra}/${apiDataCache.anoCompra}` : "",
+      modalidade: String(apiDataCache.modalidadeNome || ""),
+      modo_disputa: String(apiDataCache.modoDisputaNome || ""),
+      orgao_cnpj: String(apiDataCache.orgaoEntidade?.cnpj || ""),
+      orgao_razao_social: String(apiDataCache.orgaoEntidade?.razaoSocial || ""),
+      municipio: String(apiDataCache.unidadeOrgao?.municipioNome || ""),
+      uf: String(apiDataCache.unidadeOrgao?.ufSigla || ""),
+      objeto: String(apiDataCache.objetoCompra || ""),
+      valor_total_estimado_raw: apiDataCache.valorTotalEstimado != null ? String(apiDataCache.valorTotalEstimado) : null,
+      valor_total_homologado_raw: apiDataCache.valorTotalHomologado != null ? String(apiDataCache.valorTotalHomologado) : null,
+      situacao: String(apiDataCache.situacaoCompraNome || ""),
+      srp: apiDataCache.srp === true,
+      amparo_legal: String(apiDataCache.amparoLegal?.nome || ""),
+      data_publicacao_pncp_raw: String(apiDataCache.dataPublicacaoPncp || ""),
+      data_abertura_proposta_raw: String(apiDataCache.dataAberturaProposta || ""),
+      data_encerramento_proposta_raw: String(apiDataCache.dataEncerramentoProposta || ""),
+      link_sistema_origem: String(apiDataCache.linkSistemaOrigem || ""),
+      url: currentUrl,
+      itens: itens,
+    };
+
+    // Gera um hash simples dos valores raw capturados do DOM para não enviar repetido
+    const currentHash = itens.map(i => `${i.numero_item}:${i.valor_unitario_estimado_raw}:${i.valor_total_raw}`).join("|");
+    if (currentHash === lastHash && currentHash !== "") return;
+    lastHash = currentHash;
+
+    chrome.runtime.sendMessage({
+      type: "DOM_COUNT",
+      domain: "pncp_detail",
+      count: 1,
+      items: [item]
+    });
+  }
 })();

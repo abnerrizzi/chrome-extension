@@ -231,7 +231,18 @@ async function load() {
   const listKey = `tab:${tab.id}`;
   const detailKey = `tab:${tab.id}:detail`;
   const stored = await chrome.storage.session.get([listKey, detailKey]);
-  const data = stored[listKey] || stored[detailKey];
+  let data = stored[listKey] || stored[detailKey];
+
+  // Se ambos existem, a lista domina por padrão (útil para LinkedIn onde convivem).
+  // Mas no PNCP ou LinkedIn full-page detail, se a URL for exclusiva de detalhe,
+  // preferimos o slot de detalhe.
+  if (stored[listKey] && stored[detailKey]) {
+    const isPncpDetailUrl = /\/editais\/\d+\/\d+\/\d+/.test(tab.url || "");
+    const isLinkedinViewUrl = /\/jobs\/view\//.test(tab.url || "");
+    if (isPncpDetailUrl || isLinkedinViewUrl) {
+      data = stored[detailKey];
+    }
+  }
 
   renderSiteSection(data, tab, autoSendMap);
 
