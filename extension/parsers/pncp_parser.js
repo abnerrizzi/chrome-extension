@@ -93,11 +93,14 @@
     const url = el.href || "";
 
     const pncp_id = getFieldByLabel(el, "Id contratação PNCP:") || "";
-    
-    let extId = null;
-    const hrefMatch = href.match(/\/editais\/(\d+)\/(\d+)\/(\d+)/);
-    if (hrefMatch) {
-      extId = `${hrefMatch[1]}/${hrefMatch[2]}/${hrefMatch[3]}`;
+    // Se não achar pela label exata, tenta encontrar um padrão do ID do PNCP: CNPJ-1-SEQ/ANO
+    let extId = pncp_id;
+    if (!extId) {
+      const hrefMatch = href.match(/\/editais\/(\d+)\/(\d+)\/(\d+)/);
+      if (hrefMatch) {
+        // Fallback: monta um ID consistente com o CNPJ/ANO/SEQ
+        extId = `${hrefMatch[1]}/${hrefMatch[2]}/${hrefMatch[3]}`;
+      }
     }
 
     if (!extId) return null;
