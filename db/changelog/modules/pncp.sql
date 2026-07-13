@@ -102,3 +102,10 @@ ALTER TABLE pncp_purchase_items ADD COLUMN valor_unitario_estimado_raw TEXT;
 ALTER TABLE pncp_purchase_items ADD COLUMN valor_total_raw TEXT;
 --rollback ALTER TABLE pncp_purchase_items DROP COLUMN IF EXISTS valor_total_raw;
 --rollback ALTER TABLE pncp_purchase_items DROP COLUMN IF EXISTS valor_unitario_estimado_raw;
+
+--changeset claude:pncp-007-pncp-id-unique
+--preconditions onFail:MARK_RAN onError:HALT
+--precondition-sql-check expectedResult:1 SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='pncp_items'
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'pncp_items' AND indexname = 'uq_pncp_items_pncp_id'
+CREATE UNIQUE INDEX uq_pncp_items_pncp_id ON pncp_items(pncp_id) WHERE pncp_id IS NOT NULL AND pncp_id <> '';
+--rollback DROP INDEX IF EXISTS uq_pncp_items_pncp_id;

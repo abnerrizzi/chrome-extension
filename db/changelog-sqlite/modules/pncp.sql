@@ -79,3 +79,10 @@ SELECT 1;
 ALTER TABLE pncp_purchase_items ADD COLUMN valor_unitario_estimado_raw TEXT;
 ALTER TABLE pncp_purchase_items ADD COLUMN valor_total_raw TEXT;
 --rollback SELECT 1;
+
+--changeset claude:pncp-007-pncp-id-unique
+--preconditions onFail:MARK_RAN onError:HALT
+--precondition-sql-check expectedResult:1 SELECT count(*) FROM sqlite_master WHERE type='table' AND name='pncp_items'
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM sqlite_master WHERE type='index' AND name='uq_pncp_items_pncp_id'
+CREATE UNIQUE INDEX uq_pncp_items_pncp_id ON pncp_items(pncp_id) WHERE pncp_id IS NOT NULL AND pncp_id <> '';
+--rollback DROP INDEX IF EXISTS uq_pncp_items_pncp_id;
