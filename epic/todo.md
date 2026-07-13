@@ -64,3 +64,13 @@
 - [x] Skill `/epic-sync` registra Epics/Stories do plano e mantém `epic/todo.md` em sincronia
 - [x] Hook `PostToolUse` invocando `/commit`
 - [x] `epic/todo.md` mantido em sincronia com o progresso
+
+## EPIC-008 — Módulo PNCP (Governo - listagem + detalhe)
+- [x] ST-040 `extension/parsers/pncp_parser.js` DOM list parser
+- [x] ST-041 `extension/parsers/pncp_detail_parser.js` API detail parser
+- [x] ST-042 Registry in `background.js` (DOMAIN_REGISTRY), `manifest.json`, and `popup.js` (KNOWN_DOMAINS / previewFields)
+- [x] ST-043 JSON Schemas `pncp.json` (lista) and `pncp_detail.json` (detalhe)
+- [x] ST-044 Normalizer `normalization/pncp.py` + registration in `ingest.py`
+- [x] ST-045 Persistence mapping in `persistence.py` (both domains to `pncp_items`)
+- [x] ST-046 Liquibase migrations `modules/pncp.sql` (Postgres & SQLite trees) + includes in `master.xml`
+- [x] ST-047 Server-side fetcher `pncp_fetcher.py` + `pncp_parser.py` (app/scrape) and scrape router integration

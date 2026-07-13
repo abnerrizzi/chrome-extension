@@ -12,6 +12,7 @@ from app.core.schema_registry import SchemaNotFoundError, get_schema, list_domai
 from app.normalization import auctions as norm_auctions
 from app.normalization import linkedin as norm_linkedin
 from app.normalization import olx as norm_olx
+from app.normalization import pncp as norm_pncp
 
 router = APIRouter(tags=["ingest"])
 
@@ -20,6 +21,8 @@ NORMALIZERS = {
     "auctions": norm_auctions.normalize,
     "linkedin": norm_linkedin.normalize_list,
     "linkedin_detail": norm_linkedin.normalize_detail,
+    "pncp": norm_pncp.normalize,
+    "pncp_detail": norm_pncp.normalize_detail,
 }
 
 

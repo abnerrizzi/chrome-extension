@@ -10,6 +10,32 @@ Liquibase changeset id (e.g. `olx-004`).
 
 ## [Unreleased]
 
+## [0.6.10] — 2026-07-13
+
+### Changed
+- **Padronização do external_id no PNCP**: Passa a usar de forma consistente o formato com barras da URL (`CNPJ/ANO/SEQ`) em vez do formato com hífen, tanto no parser da listagem quanto na página de detalhes, para garantir que o upsert não gere chaves duplicadas.
+
+## [0.6.9] — 2026-07-13
+
+### Added
+- **Configuração de logs no console**: Opção para ligar/desligar logs no console local do navegador e alternar entre os níveis de verbosidade "info" e "debug".
+- **Unicidade de pncp_id**: Adicionado índice único para a coluna `pncp_id` na tabela `pncp_items` (changeset `pncp-007` para Postgres e SQLite).
+
+### Fixed
+- **Navegação SPA do PNCP**: Corrigida a extração na página de detalhes do PNCP ao navegar de volta para o mesmo item (uso de MutationObserver para aguardar tabelas Angular e remoção de trava de URL).
+- **Slot de Popup para Detalhe**: Correção no popup que agora prioriza a aba de detalhes no PNCP e visualizações dedicadas, mesmo com o slot da lista ainda ativo na sessão.
+- **Extração de Campos do PNCP (Listagem)**: Correção na função `getFieldByLabel` no parser `pncp_parser.js` para não retornar strings vazias de elementos filhos aninhados (como `<strong>`). Isso restabelece a extração correta de `pncp_id`, `objeto`, `modalidade`, `orgao` e `local` a partir do DOM da listagem.
+- **Tratamento de Strings Vazias na Normalização**: Modificado o normalizador da API PNCP para mapear strings de texto vazias para `None` (`NULL` no DB), garantindo que atualizações da listagem não sobrescrevam via `COALESCE` os campos ricos inseridos previamente pela página de detalhes.
+
+## [0.6.8] — 2026-07-12
+
+### Added
+- **Captura de valores Sigilosos no PNCP**: Parser `pncp_detail_parser.js` agora extrai os itens diretamente do DOM para capturar o texto exibido na tabela (permitindo obter o status de valor "Sigiloso" em editais com valores ocultados).
+- Novas colunas `valor_unitario_estimado_raw` e `valor_total_raw` (TEXT) em `pncp_purchase_items` para preservar o valor original de texto (changeset `pncp-006` para Postgres e SQLite).
+
+### Changed
+- **Sobrescrita de dados no PNCP**: O upsert do domínio `pncp_detail` agora sobrescreve todos os campos com as informações mais recentes da página, removendo o uso de `COALESCE` que preservava os dados antigos.
+
 ## [0.6.0] — 2026-07-12
 
 ### Added

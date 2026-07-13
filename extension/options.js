@@ -1,6 +1,8 @@
 const DEFAULT_API_URL = "http://localhost:8000";
 
 const $url = document.getElementById("apiUrl");
+const $consoleLogEnabled = document.getElementById("consoleLogEnabled");
+const $consoleLogLevel = document.getElementById("consoleLogLevel");
 const $form = document.getElementById("form");
 const $save = document.getElementById("save");
 const $test = document.getElementById("test");
@@ -21,8 +23,14 @@ function originPattern(url) {
 }
 
 async function load() {
-  const { apiUrl } = await chrome.storage.sync.get({ apiUrl: DEFAULT_API_URL });
-  $url.value = apiUrl;
+  const prefs = await chrome.storage.sync.get({ 
+    apiUrl: DEFAULT_API_URL,
+    consoleLogEnabled: true,
+    consoleLogLevel: "info"
+  });
+  $url.value = prefs.apiUrl;
+  $consoleLogEnabled.checked = prefs.consoleLogEnabled;
+  $consoleLogLevel.value = prefs.consoleLogLevel;
 }
 
 $form.addEventListener("submit", async (e) => {
@@ -41,7 +49,11 @@ $form.addEventListener("submit", async (e) => {
     if (!granted) {
       setStatus(`Permissão para ${pattern} negada. Salvo mesmo assim — chamadas vão falhar até você autorizar.`, "err");
     }
-    await chrome.storage.sync.set({ apiUrl: url });
+    await chrome.storage.sync.set({ 
+      apiUrl: url,
+      consoleLogEnabled: $consoleLogEnabled.checked,
+      consoleLogLevel: $consoleLogLevel.value
+    });
     if (granted) setStatus(`Salvo. Permissão concedida para ${pattern}.`, "ok");
   } catch (err) {
     setStatus("Erro ao salvar: " + err.message, "err");

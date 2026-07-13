@@ -150,6 +150,111 @@ def _insert_items(cur, domain_id: str, session_id: int, items: list[dict]) -> No
               it.get("employment_type"), it.get("applicants"), it.get("source_view"))
              for it in items],
         )
+    elif domain_id == "pncp":
+        cur.executemany(
+            db.q(
+                "INSERT INTO pncp_items "
+                "(session_id, external_id, pncp_id, numero_edital, modalidade, "
+                " municipio, uf, objeto, data_publicacao_pncp, url) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?) "
+                f"{on_conflict} "
+                "  session_id=EXCLUDED.session_id, "
+                "  pncp_id=COALESCE(EXCLUDED.pncp_id, pncp_items.pncp_id), "
+                "  numero_edital=COALESCE(EXCLUDED.numero_edital, pncp_items.numero_edital), "
+                "  modalidade=COALESCE(EXCLUDED.modalidade, pncp_items.modalidade), "
+                "  municipio=COALESCE(EXCLUDED.municipio, pncp_items.municipio), "
+                "  uf=COALESCE(EXCLUDED.uf, pncp_items.uf), "
+                "  objeto=COALESCE(EXCLUDED.objeto, pncp_items.objeto), "
+                "  data_publicacao_pncp=COALESCE(EXCLUDED.data_publicacao_pncp, pncp_items.data_publicacao_pncp), "
+                "  url=EXCLUDED.url"
+            ),
+            [(session_id, it.get("external_id"), it.get("pncp_id"), it.get("numero_edital"),
+              it.get("modalidade"), it.get("municipio"), it.get("uf"), it.get("objeto"),
+              it.get("data_publicacao_pncp"), it.get("url"))
+             for it in items],
+        )
+    elif domain_id == "pncp_detail":
+        for it in items:
+            cur.execute(
+                db.q(
+                    "INSERT INTO pncp_items "
+                    "(session_id, external_id, pncp_id, numero_edital, modalidade, "
+                    " modo_disputa, orgao_cnpj, orgao_razao_social, municipio, uf, "
+                    " objeto, valor_total_estimado, valor_total_homologado, situacao, srp, "
+                    " amparo_legal, data_publicacao_pncp, data_abertura_proposta, "
+                    " data_encerramento_proposta, link_sistema_origem, url) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                    f"{on_conflict} "
+                    "  session_id=EXCLUDED.session_id, "
+                    "  pncp_id=EXCLUDED.pncp_id, "
+                    "  numero_edital=EXCLUDED.numero_edital, "
+                    "  modalidade=EXCLUDED.modalidade, "
+                    "  modo_disputa=EXCLUDED.modo_disputa, "
+                    "  orgao_cnpj=EXCLUDED.orgao_cnpj, "
+                    "  orgao_razao_social=EXCLUDED.orgao_razao_social, "
+                    "  municipio=EXCLUDED.municipio, "
+                    "  uf=EXCLUDED.uf, "
+                    "  objeto=EXCLUDED.objeto, "
+                    "  valor_total_estimado=EXCLUDED.valor_total_estimado, "
+                    "  valor_total_homologado=EXCLUDED.valor_total_homologado, "
+                    "  situacao=EXCLUDED.situacao, "
+                    "  srp=EXCLUDED.srp, "
+                    "  amparo_legal=EXCLUDED.amparo_legal, "
+                    "  data_publicacao_pncp=EXCLUDED.data_publicacao_pncp, "
+                    "  data_abertura_proposta=EXCLUDED.data_abertura_proposta, "
+                    "  data_encerramento_proposta=EXCLUDED.data_encerramento_proposta, "
+                    "  link_sistema_origem=EXCLUDED.link_sistema_origem, "
+                    "  url=EXCLUDED.url"
+                ),
+                (
+                    session_id, it.get("external_id"), it.get("pncp_id"), it.get("numero_edital"),
+                    it.get("modalidade"), it.get("modo_disputa"), it.get("orgao_cnpj"), it.get("orgao_razao_social"),
+                    it.get("municipio"), it.get("uf"), it.get("objeto"), it.get("valor_total_estimado"),
+                    it.get("valor_total_homologado"), it.get("situacao"), it.get("srp"), it.get("amparo_legal"),
+                    it.get("data_publicacao_pncp"), it.get("data_abertura_proposta"),
+                    it.get("data_encerramento_proposta"), it.get("link_sistema_origem"), it.get("url")
+                )
+            )
+
+            # Get database generated/updated id
+            cur.execute(db.q("SELECT id FROM pncp_items WHERE external_id = ?"), (it["external_id"],))
+            row = cur.fetchone()
+            if not row:
+                continue
+            purchase_id = row[0]
+
+            # Clear existing items
+            cur.execute(db.q("DELETE FROM pncp_purchase_items WHERE purchase_id = ?"), (purchase_id,))
+
+            # Insert new items if present
+            purchase_items = it.get("itens") or []
+            if purchase_items:
+                cur.executemany(
+                    db.q(
+                        "INSERT INTO pncp_purchase_items ("
+                        "  purchase_id, numero_item, descricao, material_ou_servico, "
+                        "  valor_unitario_estimado, valor_unitario_estimado_raw, "
+                        "  valor_total, valor_total_raw, "
+                        "  quantidade, unidade_medida, situacao"
+                        ") VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+                    ),
+                    [
+                        (
+                            purchase_id,
+                            pi.get("numero_item"),
+                            pi.get("descricao"),
+                            pi.get("material_ou_servico"),
+                            pi.get("valor_unitario_estimado"),
+                            pi.get("valor_unitario_estimado_raw"),
+                            pi.get("valor_total"),
+                            pi.get("valor_total_raw"),
+                            pi.get("quantidade"),
+                            pi.get("unidade_medida"),
+                            pi.get("situacao")
+                        )
+                        for pi in purchase_items
+                    ]
+                )
 
 
 def fetch_recent_sessions(limit: int = 20) -> list[dict]:
@@ -186,6 +291,8 @@ def fetch_session_items(session_id: int) -> dict:
         "auctions": "auction_items",
         "linkedin": "linkedin_jobs",
         "linkedin_detail": "linkedin_job_details",
+        "pncp": "pncp_items",
+        "pncp_detail": "pncp_items",
     }
     try:
         with db.connect() as conn:

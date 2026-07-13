@@ -10,12 +10,14 @@ from pydantic import BaseModel
 
 from app.routers.ingest import process_items
 from app.scrape import olx_fetcher, olx_parser
+from app.scrape import pncp_fetcher, pncp_parser
 
 router = APIRouter(tags=["scrape"])
 
 # domain_id -> (fetch_fn(url, cookies) -> Response, parse_fn(html) -> list[dict])
 FETCHERS: dict[str, tuple[Callable, Callable]] = {
     "olx": (olx_fetcher.fetch, olx_parser.parse_html),
+    "pncp_detail": (pncp_fetcher.fetch, pncp_parser.parse_detail_json),
 }
 
 DEFAULT_COOKIE_FILE = "/app/.olx-cookies.txt"
@@ -28,6 +30,8 @@ class ScrapeRequest(BaseModel):
 
 
 def _resolve_cookies(req: ScrapeRequest) -> str:
+    if req.domain_id == "pncp_detail":
+        return ""
     if req.cookies:
         return req.cookies.strip()
     path = os.getenv("OLX_COOKIE_FILE", DEFAULT_COOKIE_FILE)

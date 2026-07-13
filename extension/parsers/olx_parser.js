@@ -2,7 +2,13 @@
 // A OLX migrou para o Next.js App Router, removendo o __NEXT_DATA__.
 // Agora extraímos os dados diretamente dos AdCards no HTML.
 
-(function () {
+(async function () {
+  const logPrefs = await chrome.storage.sync.get({ consoleLogEnabled: true, consoleLogLevel: "info" });
+  const originalInfo = console.info;
+  const originalDebug = console.debug;
+  console.info = (...args) => { if (logPrefs.consoleLogEnabled) originalInfo.apply(console, args); };
+  console.debug = (...args) => { if (logPrefs.consoleLogEnabled && logPrefs.consoleLogLevel === 'debug') originalDebug.apply(console, args); };
+
   let lastHash = "";
   runOnce();
 

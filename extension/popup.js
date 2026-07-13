@@ -1,5 +1,5 @@
 const DEFAULT_API_URL = "http://localhost:8000";
-const KNOWN_DOMAINS = ["olx", "auctions", "linkedin", "linkedin_detail"];
+const KNOWN_DOMAINS = ["olx", "auctions", "linkedin", "linkedin_detail", "pncp", "pncp_detail"];
 
 const $count   = document.getElementById("m-count");
 const $domain  = document.getElementById("m-domain");
@@ -124,6 +124,21 @@ function previewFields(domain, item) {
                .filter(Boolean).join(" · "),
     };
   }
+  if (domain === "pncp") {
+    return {
+      title: item.numero_edital || item.pncp_id || "Edital",
+      price: item.modalidade || "",
+      meta:  [item.orgao, item.local].filter(Boolean).join(" · "),
+    };
+  }
+  if (domain === "pncp_detail") {
+    const priceStr = item.valor_total_estimado_raw ? "Est. R$ " + parseFloat(item.valor_total_estimado_raw).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : "";
+    return {
+      title: item.numero_edital || item.pncp_id || "Edital Detalhe",
+      price: priceStr || item.situacao || "",
+      meta:  [item.modalidade, item.orgao_razao_social].filter(Boolean).join(" · "),
+    };
+  }
   return {
     title: item.title || "",
     price: item.price_raw || "",
@@ -216,7 +231,18 @@ async function load() {
   const listKey = `tab:${tab.id}`;
   const detailKey = `tab:${tab.id}:detail`;
   const stored = await chrome.storage.session.get([listKey, detailKey]);
-  const data = stored[listKey] || stored[detailKey];
+  let data = stored[listKey] || stored[detailKey];
+
+  // Se ambos existem, a lista domina por padrão (útil para LinkedIn onde convivem).
+  // Mas no PNCP ou LinkedIn full-page detail, se a URL for exclusiva de detalhe,
+  // preferimos o slot de detalhe.
+  if (stored[listKey] && stored[detailKey]) {
+    const isPncpDetailUrl = /\/editais\/\d+\/\d+\/\d+/.test(tab.url || "");
+    const isLinkedinViewUrl = /\/jobs\/view\//.test(tab.url || "");
+    if (isPncpDetailUrl || isLinkedinViewUrl) {
+      data = stored[detailKey];
+    }
+  }
 
   renderSiteSection(data, tab, autoSendMap);
 

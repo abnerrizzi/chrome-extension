@@ -1,5 +1,11 @@
 // Parser dedicado para sites de leilões. Roda inclusive em iframes (allFrames: true).
-(function () {
+(async function () {
+  const logPrefs = await chrome.storage.sync.get({ consoleLogEnabled: true, consoleLogLevel: "info" });
+  const originalInfo = console.info;
+  const originalDebug = console.debug;
+  console.info = (...args) => { if (logPrefs.consoleLogEnabled) originalInfo.apply(console, args); };
+  console.debug = (...args) => { if (logPrefs.consoleLogEnabled && logPrefs.consoleLogLevel === 'debug') originalDebug.apply(console, args); };
+
   const cards = document.querySelectorAll('.lot-card, [data-lot-id]');
   const items = Array.from(cards).map((el) => {
     const lot_code = el.getAttribute('data-lot-id') || textOf(el, '.lot-code');

@@ -1,6 +1,30 @@
 // Service worker (MV3). Efêmero: só executa em resposta a eventos.
 // Não armazene estado em variáveis globais — use chrome.storage.session.
 
+let logPrefs = { enabled: true, level: 'info' };
+chrome.storage.sync.get({ consoleLogEnabled: true, consoleLogLevel: 'info' }, (res) => {
+  logPrefs.enabled = res.consoleLogEnabled;
+  logPrefs.level = res.consoleLogLevel;
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'sync') {
+    if (changes.consoleLogEnabled !== undefined) logPrefs.enabled = changes.consoleLogEnabled.newValue;
+    if (changes.consoleLogLevel !== undefined) logPrefs.level = changes.consoleLogLevel.newValue;
+  }
+});
+
+const originalInfo = console.info;
+const originalDebug = console.debug;
+
+console.info = (...args) => {
+  if (logPrefs.enabled) originalInfo.apply(console, args);
+};
+
+console.debug = (...args) => {
+  if (logPrefs.enabled && logPrefs.level === 'debug') originalDebug.apply(console, args);
+};
+
 const DOMAIN_REGISTRY = [
   {
     id: "olx",
@@ -23,6 +47,20 @@ const DOMAIN_REGISTRY = [
     id: "linkedin",
     js: ["parsers/linkedin_parser.js"],
     matches: ["*://*.linkedin.com/jobs/*"],
+    allFrames: false,
+    runAt: "document_idle",
+  },
+  {
+    id: "pncp",
+    js: ["parsers/pncp_parser.js"],
+    matches: ["*://*.pncp.gov.br/app/editais", "*://*.pncp.gov.br/app/editais?*", "*://*.pncp.gov.br/app/editais#*"],
+    allFrames: false,
+    runAt: "document_idle",
+  },
+  {
+    id: "pncp_detail",
+    js: ["parsers/pncp_detail_parser.js"],
+    matches: ["*://*.pncp.gov.br/app/editais/*/*/*"],
     allFrames: false,
     runAt: "document_idle",
   },
@@ -101,16 +139,18 @@ function urlMatchesDomain(url, domain) {
 // os content scripts registrados não rodam de novo. Re-injetamos manualmente.
 chrome.webNavigation.onHistoryStateUpdated.addListener(async (details) => {
   if (details.frameId !== 0) return;
-  const domain = DOMAIN_REGISTRY.find((d) => urlMatchesDomain(details.url, d));
-  if (!domain) return;
-  try {
-    await chrome.scripting.executeScript({
-      target: { tabId: details.tabId },
-      files: domain.js,
-    });
-  } catch (err) {
-    // Silenciar: pode falhar em URLs sem permissão de host ainda concedida.
-    console.debug("SPA re-inject skipped:", err.message);
+  const domains = DOMAIN_REGISTRY.filter((d) => urlMatchesDomain(details.url, d));
+  if (!domains.length) return;
+  for (const domain of domains) {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: details.tabId },
+        files: domain.js,
+      });
+    } catch (err) {
+      // Silenciar: pode falhar em URLs sem permissão de host ainda concedida.
+      console.debug("SPA re-inject skipped:", err.message);
+    }
   }
 });
 
