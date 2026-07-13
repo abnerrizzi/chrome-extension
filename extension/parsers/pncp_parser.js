@@ -56,6 +56,7 @@
       const idx = rawText.indexOf(label);
       if (idx !== -1) {
         const value = rawText.slice(idx + label.length).trim();
+        if (!value) continue;
         if (!bestMatch || value.length < bestMatch.length) {
           bestMatch = value;
         }
