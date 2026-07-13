@@ -10,6 +10,11 @@ Liquibase changeset id (e.g. `olx-004`).
 
 ## [Unreleased]
 
+## [0.6.10] — 2026-07-13
+
+### Changed
+- **Padronização do external_id no PNCP**: Passa a usar de forma consistente o formato com barras da URL (`CNPJ/ANO/SEQ`) em vez do formato com hífen, tanto no parser da listagem quanto na página de detalhes, para garantir que o upsert não gere chaves duplicadas.
+
 ## [0.6.9] — 2026-07-13
 
 ### Added

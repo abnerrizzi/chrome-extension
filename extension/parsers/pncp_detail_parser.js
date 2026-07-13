@@ -120,7 +120,7 @@
     });
 
     const item = {
-      external_id: String(apiDataCache.numeroControlePNCP || `${cnpj}/${ano}/${seq}`),
+      external_id: `${cnpj}/${ano}/${seq}`,
       pncp_id: String(apiDataCache.numeroControlePNCP || ""),
       numero_edital: apiDataCache.numeroCompra && apiDataCache.anoCompra ? `Edital nº ${apiDataCache.numeroCompra}/${apiDataCache.anoCompra}` : "",
       modalidade: String(apiDataCache.modalidadeNome || ""),
