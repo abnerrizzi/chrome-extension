@@ -10,6 +10,15 @@ Liquibase changeset id (e.g. `olx-004`).
 
 ## [Unreleased]
 
+## [0.6.9] — 2026-07-13
+
+### Added
+- **Configuração de logs no console**: Opção para ligar/desligar logs no console local do navegador e alternar entre os níveis de verbosidade "info" e "debug".
+
+### Fixed
+- **Navegação SPA do PNCP**: Corrigida a extração na página de detalhes do PNCP ao navegar de volta para o mesmo item (uso de MutationObserver para aguardar tabelas Angular e remoção de trava de URL).
+- **Slot de Popup para Detalhe**: Correção no popup que agora prioriza a aba de detalhes no PNCP e visualizações dedicadas, mesmo com o slot da lista ainda ativo na sessão.
+
 ## [0.6.8] — 2026-07-12
 
 ### Added
