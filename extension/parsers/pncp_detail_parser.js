@@ -47,11 +47,15 @@
 
   runOnce();
 
+  if (window.__pncpDetailObserver) {
+    window.__pncpDetailObserver.disconnect();
+  }
   let timeout = null;
   const observer = new MutationObserver(() => {
     if (timeout) clearTimeout(timeout);
     timeout = setTimeout(runOnce, 800);
   });
+  window.__pncpDetailObserver = observer;
   observer.observe(document.body, { childList: true, subtree: true });
 
   /**
@@ -116,7 +120,7 @@
     });
 
     const item = {
-      external_id: String(apiDataCache.numeroControlePNCP || `${cnpj}/${ano}/${seq}`),
+      external_id: `${cnpj}/${ano}/${seq}`,
       pncp_id: String(apiDataCache.numeroControlePNCP || ""),
       numero_edital: apiDataCache.numeroCompra && apiDataCache.anoCompra ? `Edital nº ${apiDataCache.numeroCompra}/${apiDataCache.anoCompra}` : "",
       modalidade: String(apiDataCache.modalidadeNome || ""),

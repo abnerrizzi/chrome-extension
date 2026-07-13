@@ -10,11 +10,15 @@
   runOnce();
 
   // Re-executa debounced quando o DOM muda (paginação SPA Angular, filtros, etc)
+  if (window.__pncpListObserver) {
+    window.__pncpListObserver.disconnect();
+  }
   let timeout = null;
   const observer = new MutationObserver(() => {
     if (timeout) clearTimeout(timeout);
     timeout = setTimeout(runOnce, 800);
   });
+  window.__pncpListObserver = observer;
   observer.observe(document.body, { childList: true, subtree: true });
 
   function runOnce() {
@@ -89,14 +93,11 @@
     const url = el.href || "";
 
     const pncp_id = getFieldByLabel(el, "Id contratação PNCP:") || "";
-    // Se não achar pela label exata, tenta encontrar um padrão do ID do PNCP: CNPJ-1-SEQ/ANO
-    let extId = pncp_id;
-    if (!extId) {
-      const hrefMatch = href.match(/\/editais\/(\d+)\/(\d+)\/(\d+)/);
-      if (hrefMatch) {
-        // Fallback: monta um ID consistente com o CNPJ/ANO/SEQ
-        extId = `${hrefMatch[1]}/${hrefMatch[2]}/${hrefMatch[3]}`;
-      }
+    
+    let extId = null;
+    const hrefMatch = href.match(/\/editais\/(\d+)\/(\d+)\/(\d+)/);
+    if (hrefMatch) {
+      extId = `${hrefMatch[1]}/${hrefMatch[2]}/${hrefMatch[3]}`;
     }
 
     if (!extId) return null;
